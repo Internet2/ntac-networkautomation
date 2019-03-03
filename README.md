@@ -28,7 +28,7 @@ This serves as an area to collect links to specific campuses efforts within netw
 This serves as an area to collect links to specific state and regional research and education networks efforts within network automation.
 
 # Events
-Events that are upcoming as well as those that have past which provide materials. Ultimately, some of these materials could be pulled into the repository for continued refinement and development.
+Events that are upcoming as well as those that have already occurred which provide materials. Ultimately, some of these materials could be pulled into the repository for continued refinement and development.
 
 - [Internet2 Global Summit 2018 - Network Automation at the University of Michigan](https://meetings.internet2.edu/2018-technology-exchange/detail/10005192/) - Presentation at Internet2
 - [Network Automation Workshop - UMich 2018-06-27](https://sites.google.com/umich.edu/cloud-network-workshop-2018/workshop-info/network-automation-agenda?authuser=0) - Workshop with presentation links
