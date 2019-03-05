@@ -27,6 +27,8 @@ This serves as an area to collect links to specific campuses efforts within netw
 # Regionals
 This serves as an area to collect links to specific state and regional research and education networks efforts within network automation.
 
+[Frank Seesink of WVNet](https://github.com/fseesink/Network-Automation) - Personal repository of Ansible Playbooks for Cisco devices
+
 # Events
 Events that are upcoming as well as those that have already occurred which provide materials. Ultimately, some of these materials could be pulled into the repository for continued refinement and development.
 
