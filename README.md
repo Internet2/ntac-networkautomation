@@ -5,6 +5,7 @@ Internet2 and the research and education network community are continually innov
 - [Background](#background)
 - [Campuses](#campuses)
 - [Regionals](#regionals)
+- [Collaborations](#collaborations)
 - [Events](#events)
 - [Training](#training)
 
@@ -29,6 +30,10 @@ This serves as an area to collect links to specific state and regional research 
 
 - [Frank Seesink of WVNet](https://github.com/fseesink/Network-Automation) - Personal repository of Ansible Playbooks for Cisco devices
 - [CAAREN Engineering](https://github.com/CAAREN-engineering) - Capital Area Advanced Research and Education Network - operated by the George Washington University.  Various tools - signing ROAs, check max prefix limits
+
+# Collaborations
+
+- [Faster Network Config](https://fasternetconfig.github.io/) - Growing collaboration of interested organizations learning and developing together
 
 # Events
 Events that are upcoming as well as those that have already occurred which provide materials. Ultimately, some of these materials could be pulled into the repository for continued refinement and development.
