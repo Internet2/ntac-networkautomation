@@ -60,4 +60,4 @@ This serves as a listing of available trainings specific to network automation/o
 
 # Get Connected!
 
-Internet2 NTAC Network Automation has multiple ways to get connected with the community. [This Google form](https://docs.google.com/forms/d/e/1FAIpQLSckRLJ7HzkYJMKW5ldWkA2ksIeRQCPNz9Px80eonjcTcBCX4Q/viewform) may be used to request invites to the various options.
+Internet2 NTAC Network Automation has multiple ways to get connected with the community. [This Google form](https://docs.google.com/forms/d/e/1FAIpQLSckRLJ7HzkYJMKW5ldWkA2ksIeRQCPNz9Px80eonjcTcBCX4Q/viewform) may be used to request invites to the various communication channels.
