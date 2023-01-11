@@ -32,7 +32,10 @@ This serves as an area to collect links to specific state and regional research 
 - [CAAREN Engineering](https://github.com/CAAREN-engineering) - Capital Area Advanced Research and Education Network - operated by the George Washington University.  Various tools - signing ROAs, check max prefix limits
 
 # Collaborations
-- [Internet2 NTAC Network Automation Slack]
+- [NTAC Network Automation](#get-connected)
+  - NTAC Network Automation Slack
+  - Mailing List
+  - Monthly Meetup
 - [Faster Network Config](https://fasternetconfig.github.io/) - Growing collaboration of interested organizations learning and developing together
 
 # Events
