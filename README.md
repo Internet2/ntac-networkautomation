@@ -29,7 +29,10 @@ Post-pandemic, during the 2022 Technology Exchange in December, there was revita
 It is easier than ever to connect with the SIG. See [Get Connected!](#get-connected) for more information.
 
 # Collaborations
-- [Internet2 NTAC Network Automation Slack](#get-connected)
+- [NTAC Network Automation](#get-connected)
+  - NTAC Network Automation Slack
+  - Mailing List
+  - Monthly Meetup
 - [Faster Network Config](https://fasternetconfig.github.io/) - Growing collaboration of interested organizations learning and developing together
 
 # Events
