@@ -4,11 +4,9 @@
 Internet2 and the research and education network community are continually innovating through the development and operation of advanced cyberinfrastructure. Especially important in today's network environment is the identification and implementation of automation and orchestration practices. This repository is a community-driven location to capture these practices - that in many cases are unique to the needs of R&E networks - and connect the community. Although other great sources of tools and processes are documented elsewhere such as [Network to Code's](http://www.networktocode.com/community/) [Awesome Network Automation](https://github.com/networktocode/awesome-network-automation), this site will highlight those practices and specifics that will help the campuses, the research networks and Internet2 all successfully become more efficient, secure and resilient via automation and orchestration.
 
 - [Background](#background)
-- [Campuses](#campuses)
-- [Regionals](#regionals)
 - [Collaborations](#collaborations)
+- [Resources and Guides](#resources-and-guides)
 - [Events](#events)
-- [Training](#training)
 - [Get Connected!](#get-connected)
 
 # Background
