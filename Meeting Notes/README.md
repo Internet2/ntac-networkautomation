@@ -1,6 +1,5 @@
 # Meeting Notes
 
-This folder serves to collect agenda and meeting notes from NTAC Network Automation meetups.
+This folder serves to store agendas and meeting notes from Zoom meetups for a long-term basis.
 
-During the meeting, the following Google Doc link will be used for agenda items, then transferred over here along with meeting notes.
-https://docs.google.com/document/d/1XwG6PfqjgtZ5ryqLuIs6QR500FQyHznG5QZuAcCIIuk/edit?usp=sharing
+Meeting notes from the monthly are extracted from the monthly's [EtherPad](https://etherpad.nrp-nautilus.io/p/i2-ntac-networkautomation).
