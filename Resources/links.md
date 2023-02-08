@@ -35,11 +35,24 @@ This serves as an area to collect links to specific state and regional research 
 - Arista Cloudvision - https://www.arista.com/en/cg-cv/cv-introduction-to-cloudvision
     - Commercial network orchestration and workflow automation.
 
+### Source of Truth
+
+- NetBox - https://netbox.dev
+    - [Online demo instance](https://demo.netbox.dev/)
+- Nautobot - https://www.networktocode.com/nautobot
+    - [Github](https://github.com/nautobot/nautobot)
+    - [Online demo instance](https://demo.nautobot.com/)
+    - [Development demo instance](https://next.demo.nautobot.com/)
+
 
 ## Presentations
 
-- Presentation: [Automated Configuration and Validation of a Large Scale Network](https://youtu.be/B8SIBCfpNtE)
+- [Automated Configuration and Validation of a Large Scale Network](https://youtu.be/B8SIBCfpNtE)
     - Vijay Gill presented at NANOG55 and discussed how he was building the team at Microsoft during the time. 
+- [Internet2 Tech Exchange 2022 - Beginning Automation: An Autobiography](https://internet2.edu/wp-content/uploads/2022/12/techex22-AdvancedNetworking-BeginningAutomationAnAutobiography-Byrnes.pdf) - Slideshow depicting a story of doing automation for the first time at a university.
+- [Internet2 Tech Exchange 2022 - Selecting a Network Source of Truth](https://internet2.edu/wp-content/uploads/2022/12/techex22-AdvancedNetworking-Selecting-a-Network-Source-of-Truth-Byrnes.pdf) - Research comparison slideshow of NetBox and Nautobot as of 11/2022.
+- [Internet2 Tech Exchange 2019 - Self Service Debugging at the University of Arizona](https://meetings.internet2.edu/2019-technology-exchange/detail/10005553/)
+- [Internet2 Global Summit 2018 - Network Automation at the University of Michigan](https://meetings.internet2.edu/2018-technology-exchange/detail/10005192/) - Presentation at Internet2
 
 
 ## Blogs and Reading Material
