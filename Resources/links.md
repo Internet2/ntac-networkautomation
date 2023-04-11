@@ -60,3 +60,4 @@ This serves as an area to collect links to specific state and regional research 
 - Blog: [Building a New IPAM System using Netbox and Batfish](https://joelmcguire1.medium.com/building-a-new-ipam-system-using-netbox-and-batfish-ad1e91ff3503)
 - Blog: [Git as a source of truth for network automation](https://vincent.bernat.ch/en/blog/2021-source-of-truth-network)
 - Blog: [Network Automation Expert Beginners](https://blog.ipspace.net/2023/01/network-automation-expert-beginners.html)
+- Listicle: ["Awesome Network Automation"](https://github.com/networktocode/awesome-network-automation)
