@@ -61,3 +61,5 @@ This serves as an area to collect links to specific state and regional research 
 - Blog: [Git as a source of truth for network automation](https://vincent.bernat.ch/en/blog/2021-source-of-truth-network)
 - Blog: [Network Automation Expert Beginners](https://blog.ipspace.net/2023/01/network-automation-expert-beginners.html)
 - Listicle: ["Awesome Network Automation"](https://github.com/networktocode/awesome-network-automation)
+- Blog: [Nornir - The Basics](https://theworldsgonemad.net/2021/nornir-basics/)
+- Blog: [Practical Network Automation](https://campusnetworkengineering.com/posts/practical-automation-series-part-1/)
