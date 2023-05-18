@@ -11,6 +11,10 @@ Event-based trainings, such as those held at conferences, will not be listed her
 - [Python for Network Engineers](https://pynet.twb-tech.com/free-python-course.html) - Separate from the site's paid courses, Twin Bridges Technology (twb-tech) provides a "free eight-week email course for network engineers wanting to learn Python". This course stems from a long-standing routine email course provided by Kirk Byers, now the founder of twb-tech.
 - [Network to Code's](http://www.networktocode.com/community/) [Awesome Network Automation Training List](https://github.com/networktocode/awesome-network-automation)
 
+#### Internet2 Workshop Materials
+
+- [CX2023 "Get Started with Network Automation" Workshop Materials](https://github.com/Internet2/2023-workshop-automation) - Slides, automation code, and other materials used in the automation workshop at I2 Community Exchange 2023.
+
 ### Paid
 
 - [Python for Network Engineers](https://pynet.twb-tech.com/network-automation-courses.html) - Twin Bridges Technology provides several paid courses involving Python, Ansible, Nornir, and more. This technology company was founded by Kirk Byers, the primary maintainer of the Netmiko Python package.
