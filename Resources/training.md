@@ -13,7 +13,7 @@ Event-based trainings, such as those held at conferences, will not be listed her
 
 #### Internet2 Workshop Materials
 
-- [CX2023 "Get Started with Network Automation" Workshop Materials](https://github.com/Internet2/2023-workshop-automation) - Slides, automation code, and other materials used in the automation workshop at I2 Community Exchange 2023.
+- [CX2023 "Get Started with Network Automation" Workshop Materials](https://github.internet2.edu/sbyrnes/2023-commex-workshop-automation) - Slides, automation code, and other materials used in the automation workshop at I2 Community Exchange 2023.
 
 ### Paid
 
