@@ -47,6 +47,7 @@ This serves as an area to collect links to specific state and regional research 
 
 ## Presentations
 
+- [NTAC SIG Monthly 2023/08/03 - NetBox Show-n-Tell by Rutger's](Presentations/20230803-rutgers-netbox-show-n-tell.pdf)
 - [Automated Configuration and Validation of a Large Scale Network](https://youtu.be/B8SIBCfpNtE)
     - Vijay Gill presented at NANOG55 and discussed how he was building the team at Microsoft during the time. 
 - [Internet2 Tech Exchange 2022 - Beginning Automation: An Autobiography](https://internet2.edu/wp-content/uploads/2022/12/techex22-AdvancedNetworking-BeginningAutomationAnAutobiography-Byrnes.pdf) - Slideshow depicting a story of doing automation for the first time at a university.
