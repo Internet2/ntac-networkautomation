@@ -8,4 +8,4 @@ If we can collect a few things over here, we can submit a structured pull reques
 
 Be mindful that what you share will be public and falls under the Creative Commons license. Be sure to sanitize!
 
-If you need any assistance or want tips on submitting a pull request, don't hesitate to reach out to your fellow SIG members or myself.
+If you need any assistance or want tips on submitting a pull request, don't hesitate to reach out to your fellow SIG members or myself (@sbyrnes).
