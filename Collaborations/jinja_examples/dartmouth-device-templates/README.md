@@ -54,6 +54,7 @@ For the various classes of devices the rough definition is expected to be:
 
 # Access and Aggregation
 
+```
 { 'addresses': [],
   'basenames': [ <interface_name>, <interface_name>, ... ],
   'can_deploy': <bool>,
@@ -141,10 +142,11 @@ For the various classes of devices the rough definition is expected to be:
                'vni': <int>},
              ... ]
 }
-
+```
 
 # Core
 
+```
 { 'bgp': { 'keys': [ { 'secret': <passwd>,
                        'start': <date-time> }],
            'overlay_asn': <ASN>,
@@ -211,10 +213,11 @@ For the various classes of devices the rough definition is expected to be:
   'vendor': <device_vendor>,
   'vendor_model': <device_model>
 }
-
+```
 
 # Distribution
 
+```
 { 'autoirbs': [ { 'description': <text>,
                   'enabled': True,
                   'gateway': <ip>,
@@ -385,9 +388,11 @@ For the various classes of devices the rough definition is expected to be:
               'rd': <int>},
             ... ]
 }
+```
 
 # Services
 
+```
 { 'bgp': { 'auth': [ { 'ip': <ip>,
                        'key': <passwd>,
                        'peer': <peer-name> },
@@ -595,10 +600,11 @@ For the various classes of devices the rough definition is expected to be:
               'tags': [ <tag>, <tag>, ... ] },
             ... ],
 }
-
+```
 
 # WAN
 
+```
   'bgp': { 'allowed_ISP_netblocks': [ <ip>, <ip>, ... ],
            'allowed_snmp_hosts': [ <ip>, <ip, ... ],
            'auth': [ { 'ip': <ip>,
@@ -713,3 +719,4 @@ For the various classes of devices the rough definition is expected to be:
   'vendor_model': <device-model>,
   'vlans': [ {'name': <vlan-name>, 'tags': [], 'vid': <int>, 'vni': <int>}, ... ]
 }
+```
