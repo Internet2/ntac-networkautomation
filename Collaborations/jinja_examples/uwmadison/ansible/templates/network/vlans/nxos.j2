@@ -1,0 +1,30 @@
+
+{% set stp_prio_vlans = {8192: [1,]} %}
+{# FIXME: what are the business rules for setting stp_prio per vlan/device/device_role/platform #}
+{% for vlan in netbox_vlans %}
+{# FIXME: need to get VLAN area from device region/sitegropu #}
+{% if netbox_vlans[vlan].group and netbox_vlans[vlan].group.name == "LAB" %}
+{#
+{% set stp_prio = netbox_vlans[vlan].custom_fields.stp_prio | default(8192, True) %}
+{% if not stp_prio_vlans[stp_prio] %}
+{% set stp_prio_vlans[stp_prio] = [] %}
+{% endif %}
+{{ stp_prio_vlans[stp_prio].append(vlan.vid) }}
+#}
+vlan {{ netbox_vlans[vlan].vid }}
+  name {{ netbox_vlans[vlan].name }}
+{% endif %}
+{% endfor %}
+!
+{# FIXME: spaces? sn-cssc-b380-5-node-pri43s.conf:spanning-tree vlan 2-4, 6-9, 1135, 1500-1501 priority 0 #}
+{# 
+[mtinberg@netcms1 prod active cms]$ grep -P 'spanning-tree vlan .+ priority (\d+)' s*conf r*conf | awk '{split($1, a, "-"); print a[1], $5} $5 == "1135," {print;} $5 == "1500-1501" {print;} $1 ~ /^r/ && $5 !- 8192 {print;}'  | sort | uniq -c
+#}
+{% for stp_prio in stp_prio_vlans %}
+{% set parsed_vlans = stp_prio_vlans[stp_prio] | vlan_parser %}
+spanning-tree vlan {{ parsed_vlans[0] }} priority {{ stp_prio }}
+{% for i in range (1, parsed_vlans | count) %}
+spanning-tree vlan {{ parsed_vlans[i] }} priority {{ stp_prio }}
+{% endfor %}
+{% endfor %}
+!

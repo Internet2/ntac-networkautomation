@@ -1,0 +1,129 @@
+---
+- name: IOS Config Logging
+  # NB: for testing just limit to one host
+  hosts: s-*:r-*:t-*:VG-*
+  gather_facts: false
+  connection: ansible.netcommon.network_cli
+  become:  "{{ 'False' if ansible_check_mode else 'True' }}"
+  become_method: ansible.netcommon.enable
+  serial:
+    - 50
+    - 100
+    # - 500
+  max_fail_percentage: 20
+  vars:
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    ansible_host_key_checking: false
+    # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
+    # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+    ansible_network_os: "cisco.ios.ios"
+    # ansible_network_cli_ssh_type: libssh
+    ansible_network_cli_ssh_type: paramiko
+    ansible_command_timeout: 300
+    ansible_connect_timeout: 300
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    # net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency-' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+    emergency_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency') | from_json }}"
+    enable_secret: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j enable') | from_json }}"
+    # old_enable_secret: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j enable-old') | from_json }}"
+    radius_secret: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j radius') | from_json }}"
+    netbox_devinfo: "{{ lookup('pipe','/usr/local/ns/bin/devinfo -j netbox-prod') | from_json }}"
+    netbox_api: "{{ netbox_devinfo.connection_method }}://{{ netbox_devinfo.attributes.host }}:{{ netbox_devinfo.attributes.port }}/"
+    netbox_token: "{{ netbox_devinfo.password }}"
+    platform_family: "{{ platforms[0].split('-')[0] }}"
+    device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+)', '\\1') | first }}"
+    # netdevice_inventory: "{{ query('netbox.netbox.nb_lookup', 'devices', api_filter='status=active has_primary_ip=True', api_endpoint=netbox_api, token=netbox_token) }}"
+    # netbox_vlans: "{{ query('netbox.netbox.nb_lookup', 'vlans', api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}"
+    # ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
+    # ansible_net_config: "{{ lookup('file', '/home/net/cms/' + inventory_hostname + '.conf') }}"
+  tasks:
+    - name: Set ansible_net_config
+      block:
+        - name: Get Config from NetCMS
+          set_fact:
+            ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
+            netcms_enabled: true
+        - name: Get Minimal Facts
+          cisco.ios.ios_facts:
+            gather_subset: "min"
+      rescue:
+        - name: Disable NetCMS Check-in
+          set_fact:
+            netcms_enabled: false
+        - name: Get Facts from live device
+          cisco.ios.ios_facts:
+            gather_subset: "config"
+        - name: Show Facts from device (hostname, model, image, version)
+          debug:
+            msg: "DEBUG {{ inventory_hostname }} {{ ansible_net_hostname }} {{ ansible_net_model }} {{ ansible_net_image }} {{ ansible_net_version }}"
+
+    # - name: Debug Hostvars
+    #   delegate_to: localhost
+    #   blockinfile:
+    #     path: "/var/local/tftp/ansible/{{ inventory_hostname }}.yaml"
+    #     create: true
+    #     block: |
+    #       {{ hostvars | to_yaml }}
+    - name: Debug ansible_net_version
+      when: "ansible_net_iostype == 'IOS-XE'"
+      debug:
+#        var: ansible_net_version
+        msg: device {{ inventory_hostname }} with os {{ ansible_net_iostype }} version {{ ansible_net_version }}
+    - name: Enable logging cli commands v < 17
+      when: "ansible_net_iostype == 'IOS-XE' and ansible_net_version is version('15', 'gt') and ansible_net_version is version('17', 'lt')"
+      cisco.ios.ios_config:
+        running_config: "{{ ansible_net_config }}"
+        parents:
+          - archive
+          - log config
+        lines:
+          - logging enable
+          - logging size 500
+          - notify syslog contenttype plaintext
+          - hidekeys
+        save_when: never
+      register: enable_output_iosxe
+      notify: "copy running-config startup-config"
+      failed_when: "'ERROR:' in enable_output_iosxe"
+
+    - name: Enable logging cli commands v >= 17
+      when: "ansible_net_iostype == 'IOS-XE' and ansible_net_version is version('15', 'gt') and ansible_net_version is version('17', 'ge')"
+      cisco.ios.ios_config:
+        running_config: "{{ ansible_net_config }}"
+        parents:
+          - archive
+          - log config
+        lines:
+          - logging enable
+          - logging size 500
+          - notify syslog contenttype plaintext
+#          - hidekeys   #is this really default
+        save_when: never
+      register: enable_output_iosxe
+      notify: "copy running-config startup-config"
+      failed_when: "'ERROR:' in enable_output_iosxe"
+
+  handlers:
+    - name: copy running-config startup-config
+      when: "not ansible_check_mode"
+      cisco.ios.ios_command:
+        commands:
+          - "write memory"
+        wait_for: "result[0] contains '[OK]'"
+      ignore_errors: "{{ ansible_check_mode }}"
+    - name: NetCMS Check-in
+      listen: "copy running-config startup-config"
+      when: "not ansible_check_mode and netcms_enabled"
+      command:
+        # chdir: "/home/net/cms/"
+        argv:
+          - "/usr/bin/make"
+          - "-f"
+          - "/home/net/cms/Makefile"
+          - "logmsg=ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
+          - "/home/net/cms/{{ inventory_hostname }}.update"
+      delegate_to: localhost

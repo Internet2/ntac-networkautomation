@@ -1,0 +1,38 @@
+---
+- name: NXOS NTP Configuration
+  hosts: device_types_N7K-C7010
+  gather_facts: false
+  connection: network_cli
+  vars:
+    ansible_network_os: "nxos"
+  tasks:
+    - name: NTP
+      nxos_ntp:
+        server: "{{ item }}"
+        vrf_name: "management"
+      with_items:
+        - "{{ config_context[0].ntp_ipv4 }}"
+      notify:
+        # multiple handlers are notified, or we can chain the handlers
+        - Save Startup Config
+        - NetCMS Checkin
+  handlers:
+    - name: Save Startup Config
+      nxos_command:
+        commands:
+          - "copy running-config startup-config"
+      # FIXME: either will work, make this handler a changed notify
+      # changed_when: True
+      # notify: NetCMS Checkin
+    - name: NetCMS Checkin
+      connection: local
+      command:
+        chdir: "/home/net/cms/"
+        argv:
+          - "/usr/bin/make"
+          - "-f"
+          - "/home/net/cms/Makefile"
+          - "{{ inventory_hostname }}.update"
+          - "logmsg=ansible_autocheckin_by_{{ lookup('env', 'LOGNAME') }}"
+      environment:
+        LOGNAME: "{{ lookup('env', 'LOGNAME') }}" 

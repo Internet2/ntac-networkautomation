@@ -1,0 +1,6 @@
+---
+- example: "IMG   C     17.06.03.0.3629"
+  getval: '^IMG\s+(?P<status>[IUCD])\s+(?P<version>\w+\.\w+\.\w+)'
+  result:
+    ansible_installed_versions:
+      "{{ version }}": "{{ status }}"

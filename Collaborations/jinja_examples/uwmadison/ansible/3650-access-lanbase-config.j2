@@ -1,0 +1,197 @@
+
+version 15.0
+no service config
+no service pad
+service timestamps debug datetime localtime
+service timestamps log datetime localtime
+service password-encryption
+service compress-config
+service unsupported-transceiver
+!
+hostname {{ inventory_hostname }}
+!
+boot-start-marker
+boot-end-marker
+!
+vrf definition Mgmt-vrf
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family ipv6
+ exit-address-family
+!
+logging buffered 300000
+no logging console
+enable password 7 XXXXXXXXXXXXXXXXXX
+!
+username emerg privilege 15 password 7 XXXXXXXXXXXXXXXXXXXX
+!
+aaa new-model
+!
+aaa authentication login default group radius local
+aaa authentication enable default enable
+aaa authorization exec default group radius local 
+aaa accounting exec default start-stop group radius
+!
+aaa session-id common
+stack-mac persistent timer 0
+clock timezone CDT -6 0
+clock summer-time CDT recurring
+!
+{% for domain_name in hostvars[inventory_hostname]['config_context']['domain_name_search_list'] %}
+ip domain-list {{ domain_name }}
+{% endfor %}
+ip domain-name {{ hostvars[inventory_hostname]['config_context']['primary_domain_name'] }}
+{% for name_server in hostvars[inventory_hostname]['config_context']['domain_name_servers'] %}
+ip name-server {{ name_server }}
+{% endfor %}
+ip device tracking
+!
+login delay 1
+login on-failure log
+login on-success log
+vtp mode transparent
+udld aggressive
+no setup express
+!
+system mtu 9198
+no errdisable detect cause pagp-flap
+no errdisable detect cause dtp-flap
+no errdisable detect cause l2ptguard
+errdisable recovery cause udld
+errdisable recovery cause bpduguard
+errdisable recovery cause security-violation
+errdisable recovery cause channel-misconfig (STP)
+errdisable recovery cause link-flap
+errdisable recovery cause gbic-invalid
+errdisable recovery cause loopback
+errdisable recovery interval 30
+diagnostic bootup level minimal
+port-channel load-balance src-dst-mixed-ip-port
+!
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+!
+redundancy
+ mode sso
+!
+vlan <$MGMT_VLAN>
+ name <$MGMT_VLAN_NAME>
+!
+lldp run
+!
+ip ssh time-out 30
+ip ssh authentication-retries 2
+!
+class-map match-any non-client-nrt-class
+  match non-client-nrt 
+!
+policy-map port_child_policy
+ class non-client-nrt-class
+    bandwidth remaining ratio 10
+!
+{% for interface in hostvars[inventory_hostname]['interfaces'] %}
+{% if 'enable_EdgeConf' is subset(interface.tags) %}
+{% include './3650-access-lanbase-config-edge.j2' %}}
+{% else %}
+interface {{ interface.name }}
+ description {{ interface.description }}
+ {% if interface.enabled == True %}
+ no shutdown
+ {% elif interface.enabled == False %}
+ shutdown
+ {% endif %}}
+{% endif %}
+{% endfor %}}
+
+ip default-gateway <$MGMT_DEFAULT_GATEWAY> # FIXME: how do we look this up?
+no ip http server
+ip http authentication local
+no ip http secure-server
+ip tftp blocksize 8192
+!
+ip radius source-interface Vlan<$MGMT_VLAN>
+ip sla responder
+logging history size 500
+logging history notifications
+logging trap debugging
+{% for netlog in hostvars[inventory_hostname]['config_context']['syslog_ipv4'] %}}
+logging host {{ netlog }}
+{% endfor %}
+!
+{% for snmpget in hostvars[inventory_hostname]['config_context']['acl_snmpget_ipv4'] %}
+snmp-server community XXXXXXXXXXXX RO {{ snmpget }}
+{% endfor %}
+{% for snmpwrite in hostvars[inventory_hostname]['config_context']['acl_snmpwrite_ipv4'] %}
+snmp-server community XXXXXXXXXXXX RW {{ snmpwrite }}
+{% endfor %}
+snmp-server contact NOC @ +1 608 263-4188
+snmp-server chassis-id {{ inventory_hostname }}
+snmp-server enable traps mac-notification change move threshold
+{% for netsnmp in hostvars[inventory_hostname]['config_context']['snmp_trap_ipv4'] %}}
+snmp-server host {{ netsnmp }} public
+{% endfor %}
+!
+{% for radius in hostvars[inventory_hostname]['config_context']['radius_ipv4'] %}
+radius server radius-{{ loop.index }}
+ address ipv4 {{ radius }} auth-port 1812 acct-port 1813
+ timeout 3
+ retransmit 1
+ key 7 XXXXXXXXXXXXXXXXXX
+{% endfor %}
+!
+privilege exec level 1 show logging
+privilege exec level 1 show
+no vstack
+banner motd ~
+{% include './login-banner.j2' %}
+~
+!
+line con 0
+ exec-timeout 60 0
+ logging synchronous
+ stopbits 1
+line aux 0
+ stopbits 1
+line vty 0 4
+ access-class {{ hostvars[inventory_hostname]['config_context']['acl_vty_ipv4'] }} in
+ exec-timeout 60 0
+ ipv6 access-class {{ hostvars[inventory_hostname]['config_context']['acl_vty_ipv6'] }} in
+ logging synchronous
+line vty 5 15
+ access-class {{ hostvars[inventory_hostname]['config_context']['acl_vty_ipv4'] }} in
+ exec-timeout 60 0
+ ipv6 access-class {{ hostvars[inventory_hostname]['config_context']['acl_vty_ipv6'] }} in
+ logging synchronous
+!
+ntp access-group peer 20
+ntp access-group serve 1
+ntp access-group serve-only 1
+ntp access-group query-only 1
+{% for ntp in hostvars[inventory_hostname]['config_context']['ntp_ipv4'] %}}
+ntp server {{ ntp }}
+{% endfor %}}
+wsma agent exec
+ profile httplistener
+ profile httpslistener
+wsma agent config
+ profile httplistener
+ profile httpslistener
+wsma agent filesys
+ profile httplistener
+ profile httpslistener
+wsma agent notify
+ profile httplistener
+ profile httpslistener
+!
+wsma profile listener httplistener
+ transport http
+!
+wsma profile listener httpslistener
+ transport https
+mac address-table notification change interval 300
+mac address-table notification change history-size 500
+mac address-table notification change
+ap group default-group
+end

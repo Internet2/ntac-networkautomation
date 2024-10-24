@@ -1,0 +1,270 @@
+<!--  ##########################################  -->
+<!--  #####    P A R A M E T E R S         #####  -->
+<!--  ##########################################  -->
+<!--  -->
+<!--  -->
+<!--  <$HOSTNAME>                       = EX: s-vilagrsuite-104-1-access                       	-->
+<!--  <$MGMT_VLAN>			= EX: 1144						-->
+<!--  <$MGMT_VLAN_NAME>			= EX: VILLAGER-BLDG-MGMT				-->
+<!--  <$MGMT_NETWORK_DESC>		= EX: What does Wisnic have for the subnet desc?	-->
+<!--  <$MGMT_SWITCH_IP>			= EX: 10.151.93.126					-->
+<!--  <$MGMT_SUBNET_MASK>		= EX: 255.255.255.192					-->
+<!--  <$MGMT_DEFAULT_GATEWAY>		= EX: 10.151.93.65					-->
+<!--  <$EDGE_PORT_STARTING_INT>		= EX: gi1/0/1, gi2/0/1					-->
+<!--  <$EDGE_PORT_ENDING_INT>		= EX: 24, 48 etc...					-->
+<!--  <$UNUSED_PORTS_TO_DISABLE>	= EX: GigabitEthernet1/1/1 - 4				-->
+<!--					      GigabitEthernet2/1/1 - 4				-->
+<!--  -->
+<!--  -->
+<!--  <$PRIMARY_UPLINK_PORT>		= EX: TenGigabitEthernet1/1/4				-->
+<!--  <$PRIMARY_UPLINK_DESC>		= EX: s-blah-mdf-1-radial				-->
+<!--  <$SECONDARY_UPLINK_PORT>		= EX: TenGigabitEthernet2/1/4				-->
+<!--  <$SECONDARY_UPLINK_DESC>		= EX: s-blah-mdf-1-radial				-->
+<!--  <$UPLINK_PORT_CHANNEL_NUMBER>	= EX: 48						-->
+<!--  <$UPLINK_PORT_CHANNEL_DESC>	= EX: UPLINK						-->
+<!--  -->
+<!--  -->
+<!--  -->
+<!--  -->
+version 15.0
+no service config
+no service pad
+service timestamps debug datetime localtime
+service timestamps log datetime localtime
+service password-encryption
+service compress-config
+service unsupported-transceiver
+!
+hostname <$HOSTNAME>
+!
+boot-start-marker
+boot-end-marker
+!
+vrf definition Mgmt-vrf
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family ipv6
+ exit-address-family
+!
+logging buffered 300000
+no logging console
+enable password 7 XXXXXXXXXXXXXXXXXX
+!
+username emerg privilege 15 password 7 XXXXXXXXXXXXXXXXXXXX
+!
+aaa new-model
+!
+aaa authentication login default group radius local
+aaa authentication enable default enable
+aaa authorization exec default group radius local 
+aaa accounting exec default start-stop group radius
+!
+aaa session-id common
+stack-mac persistent timer 0
+clock timezone CDT -6 0
+clock summer-time CDT recurring
+!
+ip domain-list net.wisc.edu
+ip domain-list local.net.wisc.edu
+ip domain-name local.net.wisc.edu
+ip name-server 144.92.254.254
+ip name-server 128.104.254.254
+ip device tracking
+!
+login delay 1
+login on-failure log
+login on-success log
+vtp mode transparent
+udld aggressive
+no setup express
+!
+system mtu 9198
+no errdisable detect cause pagp-flap
+no errdisable detect cause dtp-flap
+no errdisable detect cause l2ptguard
+errdisable recovery cause udld
+errdisable recovery cause bpduguard
+errdisable recovery cause security-violation
+errdisable recovery cause channel-misconfig (STP)
+errdisable recovery cause link-flap
+errdisable recovery cause gbic-invalid
+errdisable recovery cause loopback
+errdisable recovery interval 30
+diagnostic bootup level minimal
+port-channel load-balance src-dst-mixed-ip-port
+!
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+!
+redundancy
+ mode sso
+!
+
+vlan 439
+ name RESNET-VLAN-439
+vlan 435
+ name RESNET-COPYRIGHT-QUARANTINE
+vlan 726
+ name RESNET-SECURITY-QUARANTINE
+vlan 730
+ name HOUSING-ADMIN_4-56-0_23
+
+
+vlan <$MGMT_VLAN>
+ name <$MGMT_VLAN_NAME>
+!
+lldp run
+!
+ip ssh time-out 30
+ip ssh authentication-retries 2
+!
+class-map match-any non-client-nrt-class
+  match non-client-nrt 
+!
+policy-map port_child_policy
+ class non-client-nrt-class
+    bandwidth remaining ratio 10
+!
+<$PORT_CHANNELS>
+!
+interface GigabitEthernet0/0
+ vrf forwarding Mgmt-vrf
+ no ip address
+ shutdown
+ negotiation auto
+!
+<$EDGE_INTERFACES>
+!
+!
+<$INTERFACE_SHUTDOWNS>
+!
+interface <$PRIMARY_UPLINK_PORT>
+ description <$PRIMARY_UPLINK_DESC>
+ switchport trunk allowed vlan 2-899,1134-4093
+ logging event link-status
+ logging event trunk-status
+ logging event bundle-status
+ logging event spanning-tree
+ logging event status
+ channel-protocol lacp
+ channel-group <$UPLINK_PORT_CHANNEL_NUMBER> mode active
+ spanning-tree cost 20
+ service-policy output qos-TRUNK-OR-IPT-OUT
+ no shut
+!
+interface <$SECONDARY_UPLINK_PORT>
+ description <$SECONDARY_UPLINK_DESC>
+ switchport trunk allowed vlan 2-899,1134-4093
+ logging event link-status
+ logging event trunk-status
+ logging event bundle-status
+ logging event spanning-tree
+ logging event status
+ channel-protocol lacp
+ channel-group <$UPLINK_PORT_CHANNEL_NUMBER> mode active
+ spanning-tree cost 40
+ service-policy output qos-TRUNK-OR-IPT-OUT
+ no shut
+!
+interface Vlan1
+ no ip address
+ shutdown
+!
+interface Vlan<$MGMT_VLAN>
+ description <$MGMT_NETWORK_DESC>
+ ip address <$MGMT_SWITCH_IP> <$MGMT_SUBNET_MASK>
+ no shut
+!
+ip default-gateway <$MGMT_DEFAULT_GATEWAY>
+no ip http server
+ip http authentication local
+no ip http secure-server
+ip tftp blocksize 8192
+!
+ip radius source-interface Vlan<$MGMT_VLAN>
+ip sla responder
+logging history size 500
+logging history notifications
+logging trap debugging
+logging host 146.151.144.13
+!
+snmp-server community XXXXXXXXXXXX RO G-A-SnmpReadOnly
+snmp-server community XXXXXXXXXXXX RW G-A-SnmpReadWrite
+snmp-server contact NOC @ +1 608 263-4188
+snmp-server chassis-id <$HOSTNAME>
+snmp-server enable traps mac-notification change move threshold
+snmp-server community XXXXXXXX RW G-A-SnmpReadWriteHousing
+snmp-server host 146.151.144.18 public
+snmp-server host 146.151.2.51 public 
+snmp-server host 146.151.2.52 public 
+!
+radius server radius.net.wisc.edu
+ address ipv4 146.151.144.27 auth-port 1812 acct-port 1813
+ timeout 3
+ retransmit 1
+ key 7 XXXXXXXXXXXXXXXXXX
+!
+privilege exec level 1 show logging
+privilege exec level 1 show
+no vstack
+banner motd ~
+          You are connected to the <$HOSTNAME> switch.
+              Unauthorized use or access is prohibited!
+*************************************************************************
+****                                                                 ****
+****            To report problems, please call the                  ****
+****         Network Operations Center at 608-263-4188               ****
+****               or email noc@doit.wisc.edu.                       ****
+****                                                                 ****
+*************************************************************************
+~
+!
+line con 0
+ exec-timeout 60 0
+ logging synchronous
+ stopbits 1
+line aux 0
+ stopbits 1
+line vty 0 4
+ access-class G-A-AdminAccessHousing in
+ exec-timeout 60 0
+ ipv6 access-class G-A-v6AdminAccess in
+ logging synchronous
+line vty 5 15
+ access-class G-A-AdminAccessHousing in
+ exec-timeout 60 0
+ ipv6 access-class G-A-v6AdminAccess in
+ logging synchronous
+!
+ntp access-group peer 20
+ntp access-group serve 1
+ntp access-group serve-only 1
+ntp access-group query-only 1
+ntp server 128.104.30.17
+ntp server 144.92.20.100
+ntp server 144.92.104.20
+ntp server 144.92.9.22 prefer
+wsma agent exec
+ profile httplistener
+ profile httpslistener
+wsma agent config
+ profile httplistener
+ profile httpslistener
+wsma agent filesys
+ profile httplistener
+ profile httpslistener
+wsma agent notify
+ profile httplistener
+ profile httpslistener
+!
+wsma profile listener httplistener
+ transport http
+!
+wsma profile listener httpslistener
+ transport https
+mac address-table notification change history-size 500
+mac address-table notification change
+ap group default-group
+end

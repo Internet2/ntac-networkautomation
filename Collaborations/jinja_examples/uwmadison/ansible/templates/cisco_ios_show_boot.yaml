@@ -1,0 +1,5 @@
+---
+- example: "BOOT path-list      : flash:/c3750e-universalk9-mz.152-4.E10/c3750e-universalk9-mz.152-4.E10.bin"
+  getval: '^BOOT path-list\s+:\s+(?P<image>.+)'
+  result:
+    ansible_boot_image: "{{ image }}"

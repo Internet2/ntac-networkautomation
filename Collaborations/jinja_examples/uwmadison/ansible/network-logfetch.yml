@@ -1,0 +1,66 @@
+---
+- name: Fetch Cisco Catalyst logs
+  hosts: r-*:s-*:t-*
+  gather_facts: false
+  become: false
+  become_method: enable
+  connection: ansible.netcommon.network_cli
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    ansible_host_key_checking: false
+    ansible_network_os: cisco.ios.ios
+    ansible_network_cli_ssh_type: paramiko
+    ansible_command_timeout: 300
+    ansible_connect_timeout: 300
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+    netbox_devinfo: "{{ lookup('pipe','/usr/local/ns/bin/devinfo -j netbox-prod') | from_json }}"
+    netbox_api: "{{ netbox_devinfo.connection_method }}://{{ netbox_devinfo.attributes.host }}:{{ netbox_devinfo.attributes.port }}/"
+    netbox_token: "{{ netbox_devinfo.password }}"
+  tasks:
+    - name: catalyst show logging
+      cisco.ios.ios_command:
+        commands: "show logging"
+      register: output
+    - name: catalyst output
+      delegate_to: localhost
+      copy:
+        dest: "files/netlog/{{ inventory_hostname }}.2024-07-01"
+        content: "{{ output.stdout[0] }}"
+
+- name: Fetch Cisco Nexus logs
+  hosts: rn-*:sn-*
+  gather_facts: false
+  become: false
+  become_method: enable
+  connection: ansible.netcommon.network_cli
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    ansible_host_key_checking: false
+    ansible_network_os: cisco.nxos.nxos
+    ansible_network_cli_ssh_type: paramiko
+    ansible_command_timeout: 300
+    ansible_connect_timeout: 300
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+    netbox_devinfo: "{{ lookup('pipe','/usr/local/ns/bin/devinfo -j netbox-prod') | from_json }}"
+    netbox_api: "{{ netbox_devinfo.connection_method }}://{{ netbox_devinfo.attributes.host }}:{{ netbox_devinfo.attributes.port }}/"
+    netbox_token: "{{ netbox_devinfo.password }}"
+  tasks:
+    - name: nexus show logging
+      cisco.nxos.nxos_command:
+        commands: "show logging"
+      register: output
+    - name: nexus output
+      delegate_to: localhost
+      copy:
+        dest: "files/netlog/{{ inventory_hostname }}.2024-07-01"
+        content: "{{ output.stdout[0] }}"

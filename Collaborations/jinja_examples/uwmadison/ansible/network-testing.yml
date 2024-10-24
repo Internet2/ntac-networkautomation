@@ -1,0 +1,190 @@
+---
+- name: ArubaOS Test Playbook
+  hosts: cm-*:c-*
+  gather_facts: false
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    # Use modules from ansible-galaxy collection arubanetworks.aos_switch https://github.com/aruba/aos-switch-ansible-collection
+    ansible_connection: network_cli
+    ansible_network_os: arubanetworks.aos_switch.arubaoss
+    # Use Ansible 2.9 built-in modules
+    # ansible_connection: local
+    # ansible_network_os: aruba
+
+
+    aruba_route_cache_ip: "10.140.0.1"
+    aruba_route_cache_regex: "{{ aruba_route_cache_ip }}\\s+"
+  tasks:
+    # Facts not in the built-in arubaos support, only aruba_command and aruba_config
+    # others installed via ansible galaxy
+    # Can't mix rest with ssh calls in same palybook as they use differnt connection methods
+    # - name: Gather Facts
+    #   arubanetworks.aos_switch.arubaoss_facts:
+
+    - name: show route cache
+      # Ansible 2.9 built-in module
+      # aruba_command:
+      # ansible-galaxy arubanetworks.aos_switch module
+      arubanetworks.aos_switch.arubaoss_command:
+        commands:
+        # We don't need to filter the IP but that might reduce the amount of data returned by a lot
+          - "show datapath route-cache | include {{ aruba_route_cache_ip }}"
+          # - "show datapath route-cache"
+      register: show_datapath_routecache
+    - name: debug route cache
+      when: "show_datapath_routecache.stdout is regex(aruba_route_cache_regex)"
+      debug:
+        msg: "{{ inventory_hostname }} route-cache {{ aruba_route_cache_ip }} matched {{ aruba_route_cache_regex }}"
+
+- name: Test playbook
+  # NB: for testing just limit to one host
+  hosts: r-*:s-*
+  # hosts: sn-*:rn-*:!tags_mgmt_vdc
+  gather_facts: false
+  # Ansible collection ansible.netcommon
+  # connection: ansible.netcommon.network_cli
+  # Ansible 2.9 built-in
+  connection: network_cli
+  become: yes
+  become_method: enable
+  # serial:
+  #   - "1%"
+  #   - "50%"
+  # any_errors_fatal: true
+  # max_fail_percentage: 5
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
+    # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+    # Ansible collection ansible.netcommon and cisco.ios
+    # ansible_network_os: "cisco.ios.ios"
+    # ansible_network_cli_ssh_type: libssh
+    # Ansible 2.9 built-in
+    # ansible_network_os: "nxos"
+    ansible_network_os: "ios"
+    ansible_command_timeout: 300
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+    snmp_devinfo: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j snmp-' + inventory_hostname) | from_json }}"
+    platform_family: "{{ platforms[0].split('-')[0] }}"
+    device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+)', '\\1') | first }}"
+    # device_info 0=type, 1=bldg, 2=room, 3=pos/num, 4=role, 5=ha
+    device_info: "{{ inventory_hostname.split('-') }}"
+    # netdevice_inventory: "{{ query('netbox.netbox.nb_lookup', 'devices', api_filter='status=active has_primary_ip=True', api_endpoint=netbox_api, token=netbox_token) }}"
+    # netbox_vlans: "{{ query('netbox.netbox.nb_lookup', 'vlans', api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}"
+    # ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
+    # ansible_net_config: "{{ lookup('file', '/home/net/cms/' + inventory_hostname + '.conf') }}"
+    # device_number: "{{ inventory_hostname.split('-')[3] | int }}"
+    # device_number_even: "{{ inventory_hostname.split('-')[3] | int is even }}"
+    # device_number_odd: "{{ inventory_hostname.split('-')[3] | int is odd}}"
+    # device_batch_evenodd: "{{ evenodd == 'all' or (evenodd == 'odd' and device_number_odd ) or (evenodd == 'even' and device_number_even ) }}"
+    connected_devices: "{{ query('netbox.netbox.nb_lookup', 'interfaces', api_filter='device=' + inventory_hostname + ' cabled=True', api_endpoint=netbox_api, token=netbox_token) | map(attribute='value.cable_peer.device.name') | list}}"
+    connected_access_devices: "{{ connected_devices | select('contains', '-access') | list }}"
+  # vars_prompt:
+  #   - name: evenodd
+  #     prompt: "Only process even/odd device position number (Hit ENTER to use default all) (all|odd|even)"
+  #     default: "all"
+  #     private: no
+
+  tasks:
+    # - name: get connected interfaces
+    #   debug:
+    #     msg: "{{ inventory_hostname }} connected to {{ connected_devices }}"
+    # - name: evaluate
+    #   when: "device_info[4] == 'access' and (connected_access_devices|length) > 0"
+    #   debug:
+    #     msg: "{{ inventory_hostname }} daisy chained to {{ connected_access_devices }}"
+    - name: GATHER SWITCH FACTS
+      ios_facts:
+        gather_subset: "min"
+      vars:
+        ansible_command_timeout: 30
+    # - name: Gather SNMP Facts
+    #   snmp_facts:
+    #     host: "{{ inventory_hostname }}"
+    #     version: "v2c"
+    #     community: "{{ snmp_devinfo.password }}"
+    - name: show install summary
+      ansible.utils.cli_parse:
+        command: show install summary
+        parser:
+          name: ansible.netcommon.native
+          os: cisco_ios
+        set_fact: cisco_ios_facts
+    - name: Debug reboot flag Catalyst IOS-XE (17.x)
+      debug:
+        verbosity: 1
+        msg: "{{ inventory_hostname }} booted {{ ansible_net_version }} installed {{ cisco_ios_facts.ansible_installed_versions | to_yaml }}"
+    - name: Debug facts
+      debug:
+        var: ansible_facts
+
+
+
+
+
+  # NXOS BIOS version check
+    # - name: Gather Facts
+    #   nxos_facts:
+    #     gather_subset: "min"
+    # - name: get bios
+    #   ansible.utils.cli_parse:
+    #     command: show version
+    #     parser:
+    #       name: ansible.netcommon.native
+    #       os: cisco_nxos
+    #     set_fact: cisco_nxos_facts
+    # - name: debug
+    #   debug:
+    #     msg: "{{ inventory_hostname }} model {{ ansible_net_platform }} version {{ ansible_net_version }} bios {{ cisco_nxos_facts.ansible_bios_version }}"
+
+    
+    # NB: This is a common style for Ansible IOS upgrade scripting
+    # https://networkproguide.com/example-ansible-playbook-for-updating-cisco-ios-switches/
+    # https://gdykeman.github.io/2018/06/26/ios-upgrades/
+    # https://blog.sys4.de/ansible-upgrade-ios-en.html
+    # - name: GATHER SWITCH FACTS
+    #   ios_facts:
+    #     gather_subset: "min"
+    # - name: debug evenodd
+    #   # when: "evenodd is 0 or (evenodd is 1 and device_number is odd) or (evenodd is 2 and device_number is even)"
+    #   # when: "evenodd == 'all' or (evenodd == 'odd' and device_number_odd ) or (evenodd == 'even' and device_number_even )"
+    #   when: "device_batch_evenodd"
+    #   debug:
+    #     msg: "device {{ inventory_hostname }} number {{ device_number }} even {{ device_number_even }} odd {{ device_number_odd }}"
+    # - name: Debug
+    #   debug:
+    #     var: hostvars[inventory_hostname]
+    # - name: show boot
+    #   ansible.utils.cli_parse:
+    #     command: show boot
+    #     parser:
+    #       name: ansible.netcommon.native
+    #       os: cisco_nxos
+    #     set_fact: cisco_nxos_facts
+    # - name: Debug boot
+    #   debug:
+    #     msg: "{{inventory_hostname}} booted {{ ansible_net_image }} provisioned {{cisco_nxos_facts.ansible_boot_image}}"
+    # - name: Debug Version check
+    #   when: "'12.2(58)' in ansible_net_version or ansible_net_version is version('15', 'gt') or ansible_net_version is version('4', 'lt')"
+    #   debug:
+    #     msg: "version-check-debug {{ inventory_hostname }} is {{ ansible_net_version }} platform {{ platform_family }} version {{ platforms[0].split('-')[1:] }} device_family {{ device_family }}"
+    # - name: show bootvar
+    #   ansible.utils.cli_parse:
+    #     command: show bootvar
+    #     parser:
+    #       name: ansible.netcommon.native
+    #       os: cisco_ios
+    #     set_fact: cisco_ios_facts
+    # - name: debug bootvar
+    #   debug:
+    #     var: cisco_ios_facts

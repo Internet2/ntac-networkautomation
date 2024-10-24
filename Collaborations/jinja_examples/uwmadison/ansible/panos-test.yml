@@ -1,0 +1,30 @@
+---
+- name: PANOS Test
+  hosts: fp-cssclabqa*
+  gather_facts: false
+  connection: local
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_network_os: auto
+    ansible_command_timeout: 90
+    provider:
+      ip_address: "{{ primary_ip4 }}"
+      username: "{{ ansible_user }}"
+      password: "{{ ansible_password }}"
+      port: 443
+  tasks:
+    - name: Get facts (excluding config)
+      paloaltonetworks.panos.panos_facts:
+        provider: '{{ provider }}'
+        gather_subset:
+          - 'all'
+          - '!config'
+      register: panos_facts
+    - name: Print Facts
+      debug:
+        var: panos_facts

@@ -1,0 +1,525 @@
+---
+access_stack_size:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+  - 7
+  - 8
+  - 9
+radial_stack_size:
+  - 1
+  - 2
+  - 3
+  - 4
+  - 5
+  - 6
+access_model_families:
+  - C9300X
+  - C9300
+  - WS-C3650
+  - WS-C3850
+  - N9K-93
+  - WS-C3560
+  - C9200CX
+radial_model_families:
+  - C9300X
+  - C9300
+  - N9K-93
+  - WS-C3850
+  - WS-C3650
+  - WS-C4500X
+vss_domains_file: "/home/net/cms/vss_domains.txt"
+access_model_info:  #add here if different options for access
+  C9300X:
+    - C9300X-48HX
+model_info:
+  C9200CX:
+    - C9200CX-12P-2X2G-E
+    - C9200CX-8UXG-2X-E
+  C9300:
+    - C9300-48UN
+    - C9300-48UXM
+    # - C9300-48U
+    - C9300-48P
+    # - C9300-48T
+    - C9300-24UX
+    # - C9300-24P
+    # - C9300-24T
+  C9300X:
+    - C9300X-24Y
+    - C9300X-24Y-A
+    - C9300X-12Y
+    - C9300X-48HX
+  WS-C3560:
+    - WS-C3560CX-12PD-S
+  WS-C3650:
+    - WS-C3650-48FD-L
+    - WS-C3650-48FD-E
+    - WS-C3650-48FD-S
+    - WS-C3650-48FQ-E
+    - WS-C3650-48FQ-L
+    - WS-C3650-48FQ-S
+    - WS-C3650-48FS-L
+    - WS-C3650-48PD-E
+    - WS-C3650-48PD-L
+    - WS-C3650-48PQ-E
+    - WS-C3650-48PQ-L
+    - WS-C3650-48PQ-S
+    - WS-C3650-48PS-L
+    - WS-C3650-48TD-E
+    - WS-C3650-48TD-L
+    - WS-C3650-48TD-S
+    - WS-C3650-48TQ-E
+    - WS-C3650-48TS-L
+    - WS-C3650-24FD-L
+    - WS-C3650-24PD-L
+    - WS-C3650-24PD-S
+    - WS-C3650-24PS-L
+    - WS-C3650-24TD-L
+    - WS-C3650-24TS-L
+    - WS-C3650-12X48UR-L
+  WS-C3850:
+    - WS-C3850-24XS-S
+    - WS-C3850-24XS-E
+    - WS-C3850-24XS-L
+    - WS-C3850-48F-S
+    - WS-C3850-48F-L
+    - WS-C3850-48P-S
+    - WS-C3850-48P-E
+    - WS-C3850-48P-L
+    - WS-C3850-48T-S
+    - WS-C3850-48T-E
+    - WS-C3850-48T-L
+    - WS-C3850-24P-E
+    - WS-C3850-24P-L
+    - WS-C3850-24P-S
+    - WS-C3850-24T-L
+    - WS-C3850-24T-S
+    - WS-C3850-12X48U-L
+    - WS-C3850-12X48U
+  WS-C4500X:
+    - WS-C4500X-16
+    - WS-C4500X-32
+  N9K-93:
+    - N9K-C93108TC-EX
+    - N9K-C93108TC-FX
+    - N9K-C9336C-FX2
+    - N9K-C93180LC-EX
+    - N9K-C93180YC-EX
+    - N9K-C93180YC-FX3
+    - N9K-C93180YC-FX
+    - N9K-C9332PQ
+    - N9K-C9372PX
+    - N9K-C9372PX-E
+    - N9K-C9372TX
+uplink_module_info:
+  WS-C4500X:
+    - C4KX-NM-8
+  C9300:
+    - C9300-NM-8X
+    # - C9300-NM-2Q
+    - C9300-NM-2Y
+    # - C9300-NM-4M
+    # - C9300-NM-4G
+  C9300X:
+    - C9300X-NM-8Y
+    # - C9300X-NM-8M
+    - C9300X-NM-2C
+    - C9300X-NM-4C
+# FIXME: can merge with/replace uplink_module_info if we update the code/templates
+#        to use the hash keys and don't worry about sorting, or remove/comment unneeded types
+#        or make each an array of hashes with a name: and ports: parameter that contains the port array
+# FIXME: this should have full netbox port yaml with name, type, description, etc.
+uplink_module_ports:
+  WS-C3850:
+    C3850-NM-2-10G:
+      - name: TenGigabitEthernet1/1/1
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/2
+        type: 10gbase-x-sfpp
+    C3850-NM-4-10G:
+      - name: TenGigabitEthernet1/1/1
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/2
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/3
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/4
+        type: 10gbase-x-sfpp
+    C3850-NM-2-40G:
+      - name: FortyGigabitEthernet1/1/1
+        type: 40gbase-x-qsfpp
+      - name: FortyGigabitEthernet1/1/2
+        type: 40gbase-x-qsfpp
+  WS-C4500X:
+    C4KX-NM-8:
+      - name: TenGigabitEthernet1/2/1
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/2/2
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/2/3
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/2/4
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/2/5
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/2/6
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/2/7
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/2/8
+        type: 10gbase-x-sfpp
+  C9300:
+    # NB: all devices seem to show all the uplink modules in the config whether they are installed or not
+    C9300-NM-8X:
+      - name: TenGigabitEthernet1/1/1
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/2
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/3
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/4
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/5
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/6
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/7
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/8
+        type: 10gbase-x-sfpp
+    C9300-NM-2Q:
+      - name: FourtyGigabitEthernet1/1/1
+        type: 40gbase-x-qsfpp
+      - name: FourtyGigabitEthernet1/1/2
+        type: 40gbase-x-qsfpp
+    C9300-NM-2Y:
+      - name: TwentyFiveGigE1/1/1
+        type: 25gbase-x-sfp28
+      - name: TwentyFiveGigE1/1/2
+        type: 25gbase-x-sfp28
+    C9300-NM-4M:
+      - name: GigabitEthernet1/1/1
+        type: 1000base-x-sfp
+      - name: GigabitEthernet1/1/2
+        type: 1000base-x-sfp
+      - name: GigabitEthernet1/1/3
+        type: 1000base-x-sfp
+      - name: GigabitEthernet1/1/4
+        type: 1000base-x-sfp
+    C9300-NM-4G:
+      - name: GigabitEthernet1/1/1
+        type: 1000base-x-sfp
+      - name: GigabitEthernet1/1/2
+        type: 1000base-x-sfp
+      - name: GigabitEthernet1/1/3
+        type: 1000base-x-sfp
+      - name: GigabitEthernet1/1/4
+        type: 1000base-x-sfp
+  C9300X:
+    C9300X-NM-8M:
+      - name: TenGigabitEthernet1/1/1
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/2
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/3
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/4
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/5
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/6
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/7
+        type: 10gbase-x-sfpp
+      - name: TenGigabitEthernet1/1/8
+        type: 10gbase-x-sfpp
+    C9300X-NM-8Y:
+      - name: TwentyFiveGigE1/1/1
+        type: 25gbase-x-sfp28
+      - name: TwentyFiveGigE1/1/2
+        type: 25gbase-x-sfp28
+      - name: TwentyFiveGigE1/1/3
+        type: 25gbase-x-sfp28
+      - name: TwentyFiveGigE1/1/4
+        type: 25gbase-x-sfp28
+      - name: TwentyFiveGigE1/1/5
+        type: 25gbase-x-sfp28
+      - name: TwentyFiveGigE1/1/6
+        type: 25gbase-x-sfp28
+      - name: TwentyFiveGigE1/1/7
+        type: 25gbase-x-sfp28
+      - name: TwentyFiveGigE1/1/8
+        type: 25gbase-x-sfp28
+    C9300X-NM-2C:
+      - name: HundredGigE1/1/1
+        type: 100gbase-x-qsfp28
+      - name: HundredGigE1/1/2
+        type: 100gbase-x-qsfp28
+    C9300X-NM-4C:
+      - name: HundredGigE1/1/1
+        type: 100gbase-x-qsfp28
+      - name: HundredGigE1/1/2
+        type: 100gbase-x-qsfp28
+      - name: HundredGigE1/1/3
+        type: 100gbase-x-qsfp28
+      - name: HundredGigE1/1/4
+        type: 100gbase-x-qsfp28
+uplink_eth_interfaces_single:
+  # WS-C3650:
+  #   - TenGigabitEthernet1/1/3
+  #   - TenGigabitEthernet1/1/4
+  # WS-C3850:
+  #   - TenGigabitEthernet1/1/3
+  #   - TenGigabitEthernet1/1/4
+  C9200CX-12P-2X2G-E:
+    - TenGigabitEthernet1/1/3
+    - TenGigabitEthernet1/1/4
+  C9200CX-8UXG-2X-E:
+    - TenGigabitEthernet1/1/1
+    - TenGigabitEthernet1/1/2
+  C9300X-NM-8Y:
+    - TwentyFiveGigE1/1/7
+    - TwentyFiveGigE1/1/8
+  C9300X-NM-2C:
+    - HundredGigE1/1/1
+    - HundredGigE1/1/2
+  C9300X-NM-4C:
+    - HundredGigE1/1/3
+    - HundredGigE1/1/4
+  C9300-NM-2Y:
+    - TwentyFiveGigE1/1/1
+    - TwentyFiveGigE1/1/2
+  C9300-NM-8X:
+    - TenGigabitEthernet1/1/7
+    - TenGigabitEthernet1/1/8
+uplink_eth_interfaces_stack:
+  # WS-C3650:
+  #   - TenGigabitEthernet1/1/4
+  #   - TenGigabitEthernet2/1/4
+  # WS-C3850:
+  #   - TenGigabitEthernet1/1/4
+  #   - TenGigabitEthernet2/1/4
+  C9300X-NM-8Y:
+    - TwentyFiveGigE1/1/8
+    - TwentyFiveGigE2/1/8
+  C9300X-NM-2C:
+    - HundredGigE1/1/2
+    - HundredGigE2/1/2
+  C9300X-NM-4C:
+    - HundredGigE1/1/4
+    - HundredGigE2/1/4
+  C9300-NM-2Y:
+    - TwentyFiveGigE1/1/2
+    - TwentyFiveGigE2/1/2
+  C9300-NM-8X:
+    - TenGigabitEthernet1/1/8
+    - TenGigabitEthernet2/1/8
+
+# FIXME: can we load /usr/local/ns/etc/version-map.pl instead
+#        and have a mapping of version number to file, eg.
+#        using the Netbox Config Context data
+# https://netbox.net.wisc.edu/extras/config-contexts/3/
+# {
+#     "ios_bin": "cat3k_caa-universalk9.16.12.05b.SPA.bin",
+#     "ios_md5": "9048edf018eb03cff526ad3c3e4bd9de",
+#     "ios_version": "16.12.05b"
+# }
+# FIXME: pull data from Netbox Config Context
+# https://netbox.net.wisc.edu/extras/config-contexts/?q=&device_type_id=287&device_type_id=288
+
+default_versions:
+  C9200CX:
+    ios_bin: "cat9k_lite_iosxe.17.12.02.SPA.bin"
+    ios_md5: "da5a5b3c3f8de26087af50481cbfb6d0"
+    ios_version: "17.12.02"
+  C9300:
+    ios_bin: "cat9k_iosxe.17.06.03.SPA.bin"
+    ios_md5: "0c0377252659491b73c0f08377ca9c88"
+    ios_version: "17.06.03"
+  C9300X:
+    ios_bin: "cat9k_iosxe.17.06.03.SPA.bin"
+    ios_md5: "0c0377252659491b73c0f08377ca9c88"
+    ios_version: "17.06.03"
+  WS-C3560:
+    ios_bin: "c3560cx-universalk9-tar.152-7.E5.tar"
+    ios_md5: "dd53172e4d9e5d63e9277819552b6079"
+    ios_version: "15.2(7)E5"
+  WS-C3650:
+    ios_bin: "cat3k_caa-universalk9.16.12.05b.SPA.bin"
+    ios_md5: "9048edf018eb03cff526ad3c3e4bd9de"
+    ios_version: "16.12.05b"
+  WS-C3850:
+    ios_bin: "cat3k_caa-universalk9.16.12.05b.SPA.bin"
+    ios_md5: "9048edf018eb03cff526ad3c3e4bd9de"
+    ios_version: "16.12.05b"
+  WS-C4500X:
+    ios_bin: "cat4500e-universalk9.SPA.03.08.05a.E.152-4.E5a.bin"
+    ios_md5: "5638c299017bac08cb70cbe33a568364"
+    ios_rommon: "firmwareupgradeallK10-150_1r_SG15.SPA"
+    ios_rommon_md5: "b0bb463b920172c6de4006944a80b1df"
+    ios_rommon_version: "15.0(1r)SG(15)"
+    ios_version: "03.08.05a.E"
+  N9K-93:
+    nxos_bin: "nxos.9.3.7a.bin"
+    nxos_epld_bin: "n9000-epld.9.3.7.img"
+    nxos_epld_md5: "5c3c2877694796836fc94b36c787e9ad"
+    nxos_epld_version: "9.3(7)"
+    nxos_md5: "e52671c06cece1104eddab64e1c30517"
+    nxos_version: "9.3(7a)"
+management_acls:
+  N9K-93:
+    - G-T-NexNoDhcpServerNoMcast.nxos
+    - G-A-NexAdminAccess.nxos
+    - G-A-v6NexAdminAccess.nxos
+    - G-T-v6NoDhcpServerNoRouterAdv.nxos
+    - G-T-NexNoDhcpServer.nxos
+    - G-A-NexSnmpReadOnly.nxos
+    - G-A-NexNtpPeers.nxos
+    - G-A-v6NexNtpPeers.nxos
+  WS-C3560: &mgmt_acl_c3k
+    - G-A-SnmpReadOnly.ios
+    - G-A-SnmpReadWrite.ios
+    - G-A-v6AdminAccess.ios
+    - G-A-AdminAccess.ios
+    - G-T-NoDhcpServer.ios
+    - G-T-v6NoDhcpServerNoRouterAdv.ios
+    - G-T-NoDhcpServerNoMcast.ios
+    - 1.ios
+    - 20.ios
+    - G-A-v6AdminAccess.ios
+  WS-C3650: &mgmt_acl_c3k
+    - G-A-SnmpReadOnly.ios
+    - G-A-SnmpReadWrite.ios
+    - G-A-AdminAccess.ios
+    - G-T-NoDhcpServer.ios
+    - G-T-v6NoDhcpServerNoRouterAdv.ios
+    - G-T-NoDhcpServerNoMcast.ios
+    - 1.ios
+    - 20.ios
+    - G-A-v6AdminAccess.ios
+  WS-C3650_housing: &mgmt_acl_c3k_housing
+    - G-A-SnmpReadOnly.ios
+    - G-A-SnmpReadWrite.ios
+    - G-A-AdminAccess.ios
+    - G-A-SnmpReadWriteHousing.ios
+    - G-A-AdminAccessHousing.ios
+    - G-T-NoDhcpServer.ios
+    - G-T-v6NoDhcpServerNoRouterAdv.ios
+    - G-T-NoDhcpServerNoMcast.ios
+    - 1.ios
+    - 20.ios
+    - G-A-v6AdminAccess.ios
+  WS-C3650_cloudlab: *mgmt_acl_c3k
+  WS-C3850: *mgmt_acl_c3k
+  WS-C3850_housing: *mgmt_acl_c3k_housing
+  WS-C3850_cloudlab: *mgmt_acl_c3k
+  C9200CX: *mgmt_acl_c3k
+  C9200CX_housing: *mgmt_acl_c3k_housing
+  C9300: *mgmt_acl_c3k
+  C9300_housing: *mgmt_acl_c3k_housing
+  C9300_cloudlab: *mgmt_acl_c3k
+  C9300X: *mgmt_acl_c3k
+  C9300X_housing: *mgmt_acl_c3k_housing
+  C9300X_cloudlab: *mgmt_acl_c3k
+  WS-C4500X: &mgmt_acl_c4k
+    - G-A-SnmpReadOnly.ios
+    - G-A-SnmpReadWrite.ios
+    - G-A-AdminAccess.ios
+    - 1.ios
+    - 20.ios
+    - G-A-v6AdminAccess.ios
+  WS-C4500X_housing: *mgmt_acl_c4k
+  WS-C4500X_cloudlab: *mgmt_acl_c4k
+qos_acls:
+  WS-C3650:
+    - G-T-Voice_IOSXE_3650_3850.qos
+  WS-C3850:
+    - G-T-Voice_IOSXE_3650_3850.qos
+  WS-C4500X:
+    - G-T-Voice_IOSXE_4500.qos
+  C9300:
+    - G-T-Voice_IOSXE_3650_3850.qos
+  C9300X:
+    - G-T-Voice_IOSXE_3650_3850.qos
+  C9200CX:
+    - G-T-Voice_IOSXE_3650_3850.qos
+config_context:
+  dns_ipv4:
+    - "144.92.254.254"
+    - "128.104.254.254"
+  radius_ipv4:
+    - "146.151.144.37"
+    - "146.151.144.38"
+  syslog_ipv4:
+    - "146.151.144.13"
+    - "146.151.144.54"
+  snmptrap_ipv4:
+    - "146.151.144.18"
+  ntp_ipv4:
+    - "146.151.144.40"
+    - "146.151.144.41"
+  tftp_ipv4:
+    - "146.151.144.64"
+    - "146.151.144.65"
+  callhome_ipv4: "146.151.144.64"
+config_context_oob:
+  dns_ipv4:
+    - "10.151.90.254"
+    - "10.151.91.254"
+  radius_ipv4:
+    - "10.151.90.237"
+    - "10.151.90.238"
+  syslog_ipv4:
+    - "10.151.90.190"
+    - "10.151.90.191"
+  snmptrap_ipv4:
+    - "10.151.90.8"
+  ntp_ipv4:
+    - "10.151.90.220"
+    - "10.151.90.220"
+  tftp_ipv4:
+    - "10.151.90.194"
+    - "10.151.90.195"
+  callhome_ipv4: "10.151.90.194"
+wavelengths:
+  - 1471
+  - 1491
+  - 1511
+  - 1531
+  - 1551
+  - 1571
+  - 1591
+  - 1611
+# FIXME: can we query this from netbox by matching up node device role with ha pairs?
+node_routers:
+  432NM:
+    - "rn-432nm-b3a-101-node-pri32n"
+    - "rn-animal-226-102-node-act32n"
+  ANIMAL:
+    - "rn-animal-226-101-node-pri30n"
+    - "rn-cssc-b380-102-node-act30n"
+  CSSC:
+    - "rn-cssc-b380-101-node-pri31n"
+    - "rn-432nm-b3a-102-node-act31n"
+  LAB_13-14:
+    - "rn-cssclabqa-b217-13-node-pri34n"
+    - "rn-cssclabqa-b217-14-node-act34n"
+  LAB_15-16:
+    - "rn-cssclabqa-b217-15-node-pri34n"
+    - "rn-cssclabqa-b217-16-node-act34n"
+  LAB_1-2:
+    - rn-ddncssclabqa-b217-1-node-pri92n
+    - rn-ddncssclabqa-b217-2-node-act92n
+  LAB:
+    - "rn-cssclabqa-b217-13-node-pri34n"
+    - "rn-cssclabqa-b217-14-node-act34n"
+  DDN:
+    - DDNSWITCH_CHANGE_THIS
+    - DDNSWITCH2_CHANGE_THIS
+  RBN:
+    - RBNSWITCH_CHANGE_THIS
+    - RBNSWITCH2_CHANGE_THIS

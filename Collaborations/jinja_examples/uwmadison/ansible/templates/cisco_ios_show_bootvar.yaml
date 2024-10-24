@@ -1,0 +1,10 @@
+---
+- example: "BOOT variable = disk0:s72033-advipservicesk9_wan-mz.122-33.SXI8.bin,1;disk0:s72033-advipservicesk9_wan-mz.122-33.SXI2.bin,1;"
+  getval: '^BOOT variable = (?P<bootvar>.+)'
+  result:
+    ansible_boot_variable: "{{ bootvar }}"
+
+- example: "Configuration register is 0x2101"
+  getval: '^Configuration register is 0x(?P<register>\d+)'
+  result:
+    ansible_boot_register: "{{ register }}"

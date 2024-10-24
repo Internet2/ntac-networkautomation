@@ -1,0 +1,22 @@
+---
+- example: "NXOS variable = bootflash:/nxos.9.3.7.bin"
+  getval: '^NXOS variable = (?P<image>.+)'
+  result:
+    ansible_boot_image: "{{ image }}"
+
+# show number of supervisors will match the number of the last line seen 
+- example: "sup-1"
+  getval: '^sup-(?P<sup>\d)$'
+  result:
+    ansible_sup_count: "{{ sup }}"
+
+# NB: with N7K-C7010 reporting order is current (sup1 then sup2) next boot (sup1,2)
+#     so this will return the result of the provisioned version on sup2
+- example: "kickstart variable = bootflash:/n7000-s2-kickstart.7.3.5.D1.1.bin"
+  getval: '^kickstart variable = (?P<kickstart>.+)'
+  result:
+    ansible_boot_kickstart: "{{ kickstart }}"
+- example: "system variable = bootflash:/n7000-s2-dk9.7.3.5.D1.1.bin"
+  getval: '^system variable = (?P<image>.+)'
+  result:
+    ansible_boot_image: "{{ image }}"

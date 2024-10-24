@@ -1,0 +1,12 @@
+- example: username emerg privilege 15 secret 8 $8$salt$hashvaluehere$
+  getval: '^username (?P<name>[^\s]+)( privilege (?P<privilege>\d+))?( view (?P<view>[\w-]+))?( (?P<nopassword>nopassword))?( (?P<password_type>secret|password) (?P<type>\d+) (?P<hashed_password>.+))?$'
+  result:
+    ios_users:
+      - name: "{{ name }}"
+        hashed_password:
+          type: "{{ type }}"
+          value: "{{ hashed_password }}"
+        privilege: "{{ privilege }}"
+        view: "{{ view }}"
+        password_type: "{{ password_type }}"
+        nopassword: "{{ nopassword }}"

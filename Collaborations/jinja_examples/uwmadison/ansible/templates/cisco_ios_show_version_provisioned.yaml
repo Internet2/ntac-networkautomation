@@ -1,0 +1,5 @@
+---
+- example: "Package: Base, version: 16.12.05b, status: active"
+  getval: '^Package: (?P<name>Base|rpbase|cat3k_caa-base), version: (?P<version>[\w\-\(\)\.]+), status: (?P<status>.+)'
+  result:
+    ansible_provisioned_version: "{{ version }}"

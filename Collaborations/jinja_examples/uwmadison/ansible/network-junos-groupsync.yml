@@ -1,0 +1,81 @@
+---
+- name: JunOS Sync Config Groups
+  hosts: rj-*
+  gather_facts: false
+  # Ansible collection ansible.netcommon (latest) connection modules
+  # connection: ansible.netcommon.network_cli
+  # connection: ansible.netcommon.netconf
+  # Ansible 2.9 built-in connection modules
+  # NB: only junos_command supports network_cli, junos_config and others require netconf
+  # connection: network_cli
+  connection: netconf
+  # FIXME: Is this necessary, not sure JunOS has an "enable" concept
+  # become: true
+  # become_method: enable
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    # Ansible collection junipernetworks.junos (latest) config modules
+    # ansible_network_os: junipernetworks.junos.junos
+    # Ansible 2.9 built-in junos config modules
+    ansible_network_os: "junos"
+
+    ansible_command_timeout: 300
+    ansible_connect_timeout: 300
+    # Auto-login using credentials from devinfo
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+    # Copy-pasta from other playbooks
+    # platform_family: "{{ platforms[0].split('-')[0] if platforms is defined else 'UNKN' }}"
+    # device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+|n\\dk|n\\d\\d|securesync|sdx|pa|m-\\d+|cordex-cxc|aruba|ap-\\d|poweredge|avocent|equallogic|asr-\\d+|mx\\d+|ex\\d+|srx\\d+|VM)', '\\1') | first if device_types is defined else 'VM' }}"
+    # device_type: "{{inventory_hostname.split('-')[0]}}"
+    # device_ha: "{{ inventory_hostname.split('-')[5]}}"
+  tasks:
+    # - name: enable netconf
+    #   connection: network_cli
+    #   junos_netconf:
+    #     # state: present
+    #     # listen_on: 830
+    #   notify: commit config
+    - name: Sync Config groups from uwsysnet-iptrack
+      junos_config:
+        src: "network/base/junos_groups.j2"
+        update: replace
+        # confirm: minutes
+        confirm: 5
+      # `notify` raises a flag for a handler to catch, handlers only run once
+      #  at the end no matter how many times they are flagged.  can be a list
+      #  of handlers to notify
+      notify: commit config
+  handlers:
+    - name: commit config
+      junos_config:
+        confirm_commit: true
+        comment: "ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
+      ignore_errors: "{{ ansible_check_mode }}"
+      notify: NetCMS Check-in
+    - name: NetCMS Check-in
+      # you can have a list of `notify` flags, or have multipler handlers listen
+      # for the same flag, or have handlers notify other handlers to chain them,
+      # when handlers need to have more than one step.  I suppose a handler could
+      # also import a playbook or use the `block` module to have multiple tasks.
+      # listen: "commit config"
+      command:
+        argv:
+          - "/usr/bin/make"
+          - "-f"
+          - "/home/net/cms/Makefile"
+          - "logmsg=ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
+          - "/home/net/cms/{{ inventory_hostname }}.update"
+      # task modules are ususally run against the target host `inventory_hostname`
+      # but can be delegated to other hosts, eg enabling a service on one host may
+      # need to push a command to the load balancer on another host, or in this
+      # case we run a command on the ansible control node (ie where we are running
+      # the playbook from).
+      delegate_to: localhost
+      register: netcms_make_update
+      # we use failed_when here because I check the output text and not just for a non-zero exit code
+      failed_when: "'WARN' in netcms_make_update.stdout"

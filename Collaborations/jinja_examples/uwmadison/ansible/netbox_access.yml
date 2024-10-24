@@ -1,0 +1,737 @@
+---
+
+- name: Bootstrap Configuration Access Switch
+  hosts: "tags_area_LAB"
+  gather_facts: no
+  connection: network_cli
+  tags: bootstrap-access
+
+  tasks:
+
+    - name: Get Device Interfaces
+      uri:
+        url: "{{ lookup('env', 'NETBOX_API') }}/dcim/interfaces/?device={{ inventory_hostname }}&limit=0"
+        method: GET
+        headers:
+          Authenticate: "{{ lookup('env', 'NETBOX_TOKEN') }} {{ lookup('env', 'NETBOX_API_KEY') }}"
+      register: netbox_interface
+
+    - name: Get Device Info
+      uri:
+        url: "{{ lookup('env', 'NETBOX_API') }}/dcim/devices/?name={{ inventory_hostname }}"
+        method: GET
+        headers:
+          Authenticate: "{{ lookup('env', 'NETBOX_TOKEN') }} {{ lookup('env', 'NETBOX_API_KEY') }}"
+      register: netbox_device
+
+    - name: Get Full Device Info
+      uri:
+        url: "{{ lookup('env', 'NETBOX_API') }}/dcim/devices/{{ hostvars[inventory_hostname]['netbox_device']['json']['results'][0]['id'] }}"
+        method: GET
+        headers:
+          Authenticate: "{{ lookup('env', 'NETBOX_TOKEN') }} {{ lookup('env', 'NETBOX_API_KEY') }}"
+      register: netbox_full_device
+
+    - name: Get Site VLANs
+      uri:
+        url: "{{ lookup('env', 'NETBOX_API') }}/ipam/vlans/?site={{ sites[0] | lower }}&limit=0"
+        method: GET
+        headers:
+          Authenticate: "{{ lookup('env', 'NETBOX_TOKEN') }} {{ lookup('env', 'NETBOX_API_KEY') }}"
+      register: netbox_local_vlans
+
+    - debug: var=hostvars[inventory_hostname]
+
+    # - name: Configuration via template
+    #   ios_config:
+    #     running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+    #     backup: yes
+    #     src: "./3650-access-lanbase-config.j2"
+
+
+- name: Configure Access Switch Role
+  hosts: "tags_area_LAB"
+  gather_facts: no
+  connection: network_cli
+  tags: configure-access
+
+  tasks:
+
+    - name: Get Device Info
+      uri:
+        url: "{{ lookup('env', 'NETBOX_API') }}/dcim/devices/?name={{ inventory_hostname }}"
+        method: GET
+        headers:
+          Authenticate: "{{ lookup('env', 'NETBOX_TOKEN') }} {{ lookup('env', 'NETBOX_API_KEY') }}"
+      register: netbox_device
+  
+    - name: Get Device Interfaces
+      uri:
+        url: "{{ lookup('env', 'NETBOX_API') }}/dcim/interfaces/?device={{ inventory_hostname }}&limit=0"
+        method: GET
+        headers:
+          Authenticate: "{{ lookup('env', 'NETBOX_TOKEN') }} {{ lookup('env', 'NETBOX_API_KEY') }}"
+      register: netbox_interface
+
+    - name: Get Site VLANs
+      uri:
+        url: "{{ lookup('env', 'NETBOX_API') }}/ipam/vlans/?site={{ sites[0] | lower }}&limit=0"
+        method: GET
+        headers:
+          Authenticate: "{{ lookup('env', 'NETBOX_TOKEN') }} {{ lookup('env', 'NETBOX_API_KEY') }}"
+      register: netbox_local_vlans
+
+    - debug: var=hostvars[inventory_hostname]
+
+    - name: Hostname and DNS
+      ios_system:
+        hostname: "{{ inventory_hostname }}"
+        domain_name: "{{ hostvars[inventory_hostname]['config_context']['primary_domain_name'] }}"
+        domain_search: "{{ hostvars[inventory_hostname]['config_context']['domain_name_search_list'] }}"
+        name_servers: "{{ hostvars[inventory_hostname]['config_context']['domain_name_servers'] }}"
+
+    - name: Login Banner
+      ios_banner:
+        banner: motd
+        text: |2
+                    You are connected to the {{ inventory_hostname }} switch.
+                        Unauthorized use or access is prohibited!
+          *************************************************************************
+          ****                                                                 ****
+          ****            To report problems, please call the                  ****
+          ****         Network Operations Center at 608-263-4188               ****
+          ****               or email noc@doit.wisc.edu.                       ****
+          ****                                                                 ****
+          *************************************************************************
+
+    - name: Logging Destinations
+      ios_logging:
+        aggregate:
+          - { dest: host, name: "{{ item }}" }
+          - { dest: buffered, size: 3000000 }
+          - { dest: console, state: absent }
+      with_items:
+          - "{{ hostvars[inventory_hostname]['config_context']['syslog_ipv4'] }}"
+
+    # - name: Emergency OOB User
+    #   ios_user:
+    #     name: emerg
+    #     configured_password: "XXXXXXXXXXXXXXXXXXXX"
+    #     privilege: 15
+
+    - name: Ansible Management User
+      ios_user:
+        name: ansible
+        nopassword: yes
+        sshkey: "{{ lookup('file', './keyfile.pub') }}"
+        privilege: 15
+      when: "'tags_model_C3850' in group_names or 'tags_model_C3650' in group_names"
+
+    - name: Enable LLDP
+      ios_lldp:
+        state: present
+    
+    - name: Disable Default VLAN 1
+      ios_vlan:
+        vlan_id: 1
+        state: absent
+    - name: Shutdown Default VLAN 1
+      ios_interface:
+        name: Vlan1
+        enabled: false
+        state: down
+
+    - name: Switch Services IOS 12.x+
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - no service pad
+          - service timestamps debug datetime localtime
+          - service timestamps log datetime localtime
+          - service password-encryption
+      when: "'tags_model_C3750' in group_names"
+
+    - name: Switch Services IOS 15.x+
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - no service pad
+          - service timestamps debug datetime localtime
+          - service timestamps log datetime localtime
+          - service password-encryption
+          - service compress-config
+          - service unsupported-transceiver
+      when: "'tags_model_C3850' in group_names or 'tags_model_C3650' in group_names"
+
+    - name: Boot Marker
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - boot-start-marker
+          - boot-end-marker
+
+    - name: Boot Diagnostic
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - diagnostic bootup level minimal
+      when: "'tags_model_C3850' in group_names or 'tags_model_C3650' in group_names"
+
+    - name: Default Management VRF
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        parents: vrf definition Mgmt-vrf
+        lines:
+          - address-family ipv4
+          - exit-address-family
+          - address-family ipv6
+          - exit-address-family
+      when: "'tags_model_C3850' in group_names or 'tags_model_C3650' in group_names"
+    
+    - name: AAA AuthN AuthZ Accounting
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - aaa new-model
+          - aaa authentication login default group radius local
+          - aaa authentication enable default enable
+          - aaa authorization exec default group radius local 
+          - aaa accounting exec default start-stop group radius
+          - aaa session-id common
+
+    - name: Timezone
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - clock timezone CDT -6 0
+          - clock summer-time CDT recurring
+
+    - name: Stacking Timer
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - stack-mac persistent timer 0
+
+    - name: Stack Power
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - stack-power switch 1
+          - stack-power switch 2
+          - stack-power switch 3
+          - stack-power switch 4
+          - stack-power switch 5
+          - stack-power switch 6
+          - stack-power switch 7
+          - stack-power switch 8
+          - stack-power switch 9
+      when: "'tags_model_C3850' in group_names or 'tags_model_C3650' in group_names"
+
+    - name: Stack Redundancy
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        parents: redundancy
+        lines:
+          mode sso
+      when: "'tags_model_C3850' in group_names or 'tags_model_C3650' in group_names"
+
+    - name: AuthN Logging
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - login delay 1
+          - login on-failure log
+          - login on-success log
+    
+    - name: HTTP Access
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - no ip http server
+          - no ip http secure-server
+
+    - name: SSH Access
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - ip ssh time-out 30
+          - ip ssh authentication-retries 2
+
+    - name: TFTP Access
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - ip tftp blocksize 8192
+
+    - name: QoS Queue
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - qos queue-softmax-multiplier 100
+      when: "'tags_model_C3850' in group_names or 'tags_model_C3650' in group_names"
+
+    - name: VTP Mode
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - vtp mode transparent
+    
+    - name: UDLD Mode
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - udld aggressive
+
+    - name: QoS IOS 12.x
+      ios_config:
+        lines:
+          - mls qos map policed-dscp  0 14 24 30 38 to 8
+          - mls qos map policed-dscp  10 to 12
+          - mls qos map policed-dscp  12 to 14
+          - mls qos map policed-dscp  26 to 28
+          - mls qos map policed-dscp  28 to 30
+          - mls qos map policed-dscp  32 to 34
+          - mls qos map policed-dscp  34 to 36
+          - mls qos map policed-dscp  36 to 38
+          - mls qos map cos-dscp 0 8 16 24 34 46 48 56
+          - mls qos srr-queue input bandwidth 70 30
+          - mls qos srr-queue input threshold 1 80 90
+          - mls qos srr-queue input threshold 2 80 90
+          - mls qos srr-queue input priority-queue 2 bandwidth 30
+          - mls qos srr-queue input dscp-map queue 1 threshold 2 16 24
+          - mls qos srr-queue input dscp-map queue 1 threshold 3 48 56
+          - mls qos srr-queue input dscp-map queue 2 threshold 2 32 34
+          - mls qos srr-queue input dscp-map queue 2 threshold 3 40 46
+          - mls qos srr-queue output cos-map queue 1 threshold 2 4
+          - mls qos srr-queue output cos-map queue 1 threshold 3 5
+          - mls qos srr-queue output cos-map queue 2 threshold 1 2
+          - mls qos srr-queue output cos-map queue 2 threshold 2 3
+          - mls qos srr-queue output cos-map queue 2 threshold 3 6 7
+          - mls qos srr-queue output cos-map queue 3 threshold 3 0
+          - mls qos srr-queue output cos-map queue 4 threshold 3 1
+          - mls qos srr-queue output dscp-map queue 1 threshold 2 32 34
+          - mls qos srr-queue output dscp-map queue 1 threshold 3 40 46
+          - mls qos srr-queue output dscp-map queue 2 threshold 1 18 20 22 26 28 30
+          - mls qos srr-queue output dscp-map queue 2 threshold 2 16 24
+          - mls qos srr-queue output dscp-map queue 2 threshold 3 48 56
+          - mls qos srr-queue output dscp-map queue 3 threshold 3 0
+          - mls qos srr-queue output dscp-map queue 4 threshold 1 8
+          - mls qos srr-queue output dscp-map queue 4 threshold 2 12 14
+          - mls qos srr-queue output dscp-map queue 4 threshold 3 10
+          - mls qos queue-set output 1 threshold 1 100 100 100 100
+          - mls qos queue-set output 1 threshold 2 80 90 100 400
+          - mls qos queue-set output 1 threshold 3 100 100 100 400
+          - mls qos queue-set output 1 threshold 4 90 100 100 400
+          - mls qos queue-set output 1 buffers 15 30 35 20
+          - mls qos
+      when: "'tags_model_C3750' in group_names"
+
+    - name: QoS Policy Map IOS 12.x
+      when: "'tags_model_C3750' in group_names"
+      block:
+        - name: QoS Policy Map Access Port Input Voice
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS
+              - class qos-VOICE-BEARER
+            lines:
+              - police 512000 16000 exceed-action drop
+              - set dscp ef
+        - name: QoS Policy Map Access Port Input Video
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS
+              - class qos-VIDEO-BEARER
+            lines:
+              - police 4000000 256000 exceed-action policed-dscp-transmit
+              - set dscp af41
+        - name: QoS Policy Map Access Port Input Call Signaling
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS
+              - class qos-CALL-SIGNALING
+            lines:
+              - police 32000 16000 exceed-action policed-dscp-transmit
+              - set dscp cs3
+        - name: QoS Policy Map Access Port Input default
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS
+              - class class-default
+            lines:
+              - police 50000000 512000 exceed-action policed-dscp-transmit
+              - set dscp default
+
+    - name: QoS Class Map Voice Input
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        parents: class-map match-any qos-in-VOICE-BEARER
+        lines:
+          - match access-group name qos-VOICE-BEARER
+
+    - name: QoS Class Map Video Input
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        parents: class-map match-any qos-in-VIDEO-BEARER
+        lines:
+          - match access-group name qos-VIDEO-BEARER
+
+    - name: QoS Class Map Call Signaling Input
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        parents: class-map match-any qos-in-CALL-SIGNALING
+        lines:
+          - match access-group name qos-CALL-SIGNALING
+
+    - name: QoS Policy Maps IOS 15.x
+      when: "'tags_model_C3850' in group_names or 'tags_model_C3650' in group_names"
+      block:
+        - name: QoS Table Map Exceed
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents: table-map qos-EXCEED-MARKDOWN
+            lines:
+              - map from  34 to 36
+              - map from  32 to 36
+              - map from  24 to 0
+              - map from  18 to 20
+              - map from  0 to 8
+              - default 0
+
+        - name: QoS Table Map Violate
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents: table-map qos-VIOLATE-MARKDOWN
+            lines:
+              - map from  34 to 38
+              - map from  32 to 38
+              - map from  24 to 8
+              - map from  18 to 22
+              - map from  0 to 8
+              - default 0
+        - name: QoS Table Map Untrust
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents: table-map qos-UNTRUST-DSCP
+            lines:
+              - default 0
+
+        - name: QoS Class Map Voice Output
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents: class-map match-any qos-out-VOICE-BEARER
+            lines:
+              - match dscp ef
+
+        - name: QoS Class Map Video output
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents: class-map match-any qos-out-VIDEO-BEARER
+            lines:
+              - match dscp af41 
+              - match dscp af42 
+              - match dscp af43 
+              - match dscp cs4 
+
+        - name: QoS Class Map Call Signaling Output
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents: class-map match-any qos-out-CALL-SIGNALING
+            lines:
+              - match dscp cs3
+
+        - name: QoS Class Map Scavenger Output
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents: class-map match-any qos-out-SCAVENGER
+            lines:
+              - match dscp cs1
+
+        - name: QoS Class Map non-client
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            lines:
+              - class-map match-any non-client-nrt-class
+
+        - name: QoS Policy Map Access Port Input Voice
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS-IN
+              - class qos-in-VOICE-BEARER
+            lines:
+              - police cir 512000 pir 512000 conform-action transmit  exceed-action drop  violate-action drop 
+        - name: QoS Policy Map Access Port Input Video
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS-IN
+              - class qos-in-VIDEO-BEARER
+            lines:
+              - police cir 4000000 bc 40960 pir 4000000 be 40960 conform-action transmit  exceed-action set-dscp-transmit dscp table qos-EXCEED-MARKDOWN violate-action set-dscp-transmit dscp table qos-VIOLATE-MARKDOWN
+        - name: QoS Policy Map Access Port Input Call Signaling
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS-IN
+              - class qos-in-CALL-SIGNALING
+            lines:
+              - police cir 32000 pir 32000 conform-action transmit  exceed-action set-dscp-transmit dscp table qos-EXCEED-MARKDOWN violate-action set-dscp-transmit dscp table qos-VIOLATE-MARKDOWN
+        - name: QoS Policy Map Access Port Input default
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS-IN
+              - class class-default
+            lines:
+              - police cir 50000000 pir 50000000 conform-action transmit  exceed-action set-dscp-transmit dscp table qos-EXCEED-MARKDOWN violate-action set-dscp-transmit dscp table qos-VIOLATE-MARKDOWN
+
+        - name: QoS Policy Map Access Port Output Voice
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS-OUT
+              - class qos-out-VOICE-BEARER
+            lines:
+              - priority level 1 percent 30
+
+        - name: QoS Policy Map Access Port Output Video
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS-OUT
+              - class qos-out-VIDEO-BEARER
+            lines:
+              - bandwidth remaining percent 30 
+              - queue-limit dscp af43 percent 80
+              - queue-limit dscp af42 percent 90
+
+        - name: QoS Policy Map Access Port Output Call Signaling
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS-OUT
+              - class qos-out-CALL-SIGNALING
+            lines:
+              - bandwidth remaining percent 10
+
+        - name: QoS Policy Map Access Port Output Scavenger
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS-OUT
+              - class qos-out-SCAVENGER
+            lines:
+              - bandwidth remaining percent 5
+
+        - name: QoS Policy Map Access Port Output default
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-ACCESS-OUT
+              - class class-default
+            lines:
+              - bandwidth remaining percent 35
+              - set dscp dscp table qos-UNTRUST-DSCP
+
+        - name: QoS Policy Map Port Child
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map port_child_policy
+              - class non-client-nrt-class
+            lines:
+              - bandwidth remaining ratio 10
+
+        - name: QoS Policy Map Trunk Output Voice
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-TRUNK-OR-IPT-OUT
+              - class qos-out-VOICE-BEARER
+            lines:
+              - priority level 1 percent 30
+
+        - name: QoS Policy Map Trunk Output Video
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-TRUNK-OR-IPT-OUT
+              - class qos-out-VIDEO-BEARER
+            lines:
+              - bandwidth remaining percent 30 
+              - queue-limit dscp af43 percent 80
+              - queue-limit dscp af42 percent 90
+
+        - name: QoS Policy Map Trunk Output Call Signaling
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-TRUNK-OR-IPT-OUT
+              - class qos-out-CALL-SIGNALING
+            lines:
+              - bandwidth remaining percent 10
+
+        - name: QoS Policy Map Trunk Output Scavenger
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-TRUNK-OR-IPT-OUT
+              - class qos-out-SCAVENGER
+            lines:
+              - bandwidth remaining percent 5
+
+        - name: QoS Policy Map Trunk Output default
+          ios_config:
+            running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+            parents:
+              - policy-map qos-TRUNK-OR-IPT-OUT
+              - class class-default
+            lines:
+              - bandwidth remaining percent 35 
+              - set dscp dscp table qos-UNTRUST-DSCP
+
+
+    - name: Express Setup
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - no setup express
+
+    - name: System MTU IOS 12.x
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - system mtu routing 1500
+      when: "'tags_model_C3750' in group_names"
+
+
+    - name: System MTU IOS 15.x
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - system mtu 9198
+      when: "'tags_model_C3850' in group_names or 'tags_model_C3650' in group_names"
+
+    - name: Port ErrDisable IOS 15.x
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - no errdisable detect cause pagp-flap
+          - no errdisable detect cause dtp-flap
+          - no errdisable detect cause l2ptguard
+          - errdisable recovery cause udld
+          - errdisable recovery cause bpduguard
+          - errdisable recovery cause security-violation
+          - errdisable recovery cause channel-misconfig (STP)
+          - errdisable recovery cause link-flap
+          - errdisable recovery cause gbic-invalid
+          - errdisable recovery cause loopback
+          - errdisable recovery interval 30
+      when: "'tags_model_C3750' in group_names"
+
+    - name: Port ErrDisable IOS 15.x
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - no errdisable detect cause pagp-flap
+          - no errdisable detect cause dtp-flap
+          - no errdisable detect cause l2ptguard
+          - errdisable recovery cause udld
+          - errdisable recovery cause bpduguard
+          - errdisable recovery cause security-violation
+          - errdisable recovery cause channel-misconfig
+          - errdisable recovery cause link-flap
+          - errdisable recovery cause gbic-invalid
+          - errdisable recovery cause loopback
+          - errdisable recovery interval 30
+      when: "'tags_model_C3850' in group_names or 'tags_model_C3650' in group_names"
+
+    # - name: Logging Service
+    #   ios_config:
+    #     running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+    #     lines:
+    #       - logging history size 500
+    #       - logging history notifications
+    #       - logging trap debugging
+
+    - name: LAG Hashing IOS 12.x
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - port-channel load-balance src-dst-ip
+      when: "'tags_model_C3750' in group_names"
+
+    - name: LAG Hashing IOS 15.x
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        lines:
+          - port-channel load-balance src-dst-mixed-ip-port
+      when: "'tags_model_C3850' in group_names or 'tags_model_C3650' in group_names"
+
+    # - name: Spanning Tree Mode
+    #   ios_config:
+    #     running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+    #     lines:
+    #       - spanning-tree mode rapid-pvst
+    #       - spanning tree extend systemd-id
+    #       - spanning-tree vlan 2-4094 priority 16384
+
+    # - name: IP Forwarding
+    #   ios_config:
+    #     running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+    #     lines:
+    #       - ip forward-protocol nd
+
+    - name: Legacy ACL
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        match: exact
+        replace: block
+        lines: "{{ lookup('file', '/var/local/tftp/cisco/acl/{{ item }}.ios_raw') }}"
+      with_items:
+        - "{{ hostvars[inventory_hostname]['config_context']['acl_legacy_ipv4'] }}"
+
+    - name: Standard ACL
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        parents: "ip access-list standard {{ item }}"
+        before: "no ip access-list standard {{ item }}"
+        match: exact
+        replace: block
+        lines: "{{ lookup('file', '/var/local/tftp/cisco/acl/{{ item }}.ios_raw') }}"
+        save_when: modified
+      with_items:
+        - "{{ hostvars[inventory_hostname]['config_context']['acl_snmpget_ipv4'] }}"
+        - "{{ hostvars[inventory_hostname]['config_context']['acl_snmpwrite_ipv4'] }}"
+
+    - name: Extended ACL
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        parents: "ip access-list extended {{ item }}"
+        before: "no ip access-list extended {{ item }}"
+        match: exact
+        replace: block
+        lines: "{{ lookup('file', '/var/local/tftp/cisco/acl/{{ item }}.ios_raw') }}"
+        save_when: modified
+      with_items:
+        - "{{ hostvars[inventory_hostname]['config_context']['acl_vty_ipv4'] }}"
+        - "{{ hostvars[inventory_hostname]['config_context']['acl_dhcp_ipv4'] }}"
+        - "{{ hostvars[inventory_hostname]['config_context']['acl_voip_ipv4'] }}"
+
+    - name: IPv6 ACL
+      ios_config:
+        running_config: "{{ lookup('file', '/home/net/cms/{{ inventory_hostname }}.conf') }}"
+        parents: "ipv6 access-list {{ item }}"
+        before: "no ipv6 access-list {{ item }}"
+        match: exact
+        replace: block
+        lines: "{{ lookup('file', '/var/local/tftp/cisco/acl/{{ item }}.ios_raw') }}"
+        save_when: modified
+      with_items:
+        - "{{ hostvars[inventory_hostname]['config_context']['acl_vty_ipv6'] }}"
+        - "{{ hostvars[inventory_hostname]['config_context']['acl_dhcp_ipv6'] }}"

@@ -1,0 +1,5 @@
+---
+- example: "  BIOS: version 07.68"
+  getval: '^ +BIOS: +version (?P<version>.+)'
+  result:
+    ansible_bios_version: "{{ version }}"

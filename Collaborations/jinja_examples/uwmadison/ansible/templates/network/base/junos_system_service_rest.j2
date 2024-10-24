@@ -1,0 +1,20 @@
+system {
+    services {
+        replace: rest {
+            {# http {
+                port {{ junos_rest_http_port | default("3000") }};
+                addresses {{ primary_ip4 }};
+            } #}
+            https {
+                port {{ junos_rest_https_port | default("3443") }};
+                addresses {{ primary_ip4 }};
+                {# FIXME: JunOS 20.4R3-S5.4 doesn't seem to have "system-generated-certificate;" -#}
+                server-certificate {{ junos_rest_https_cert | default("rest-tls-key") }};
+            }
+            control {
+                allowed-sources [{% for ip in opennms_core_ips %} {{ ip }}{% endfor %} ];
+                connection-limit 100;
+            }
+        }
+    }
+}

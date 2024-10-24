@@ -1,0 +1,26 @@
+---
+plugin: netbox.netbox.nb_inventory
+cache: True
+cache_plugin: jsonfile
+#uncomment api_endpoint and token for vagrant
+#api_endpoint: http://netbox        
+#token: 0123456789abcdef0123456789abcdef01234567
+validate_certs: False
+config_context: True
+interfaces: False
+# fetch_all: no
+# max_uri_length: 1000
+group_by:
+ - sites
+ - device_roles
+ - device_types
+ - tags
+ - platforms
+query_filters:
+ - has_primary_ip: True
+ - status: "active"
+#  - manufacturer: "Aruba"
+ - role: "node"
+ - role: "core"
+ - name__isw: "cm-"
+ - name__isw: "c-"

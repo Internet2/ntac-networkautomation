@@ -1,0 +1,385 @@
+---
+- name: IOS Local Users
+  # NB: for testing just limit to one host
+  hosts: s-*:r-*:t-*:VG-*
+  # hosts: ios_12:ios_15
+  gather_facts: false
+  # Ansible collection ansible.netcommon
+  connection: ansible.netcommon.network_cli
+  become: "{{ 'False' if ansible_check_mode else 'True' }}"
+  become_method: ansible.netcommon.enable
+  serial:
+    - 50
+    - 100
+    # - 500
+  max_fail_percentage: 20
+  vars:
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    ansible_host_key_checking: false
+    # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
+    # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+    ansible_network_os: "cisco.ios.ios"
+    # ansible_network_cli_ssh_type: libssh
+    ansible_network_cli_ssh_type: paramiko
+    ansible_command_timeout: 300
+    ansible_connect_timeout: 300
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    # net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency-' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+    platform_family: "{{ platforms[0].split('-')[0] }}"
+    device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+)', '\\1') | first }}"
+    ios_user_list: "{{ ios_users | map(attribute='name') | list }}"
+  tasks:
+    # - name: Get Facts
+    #   cisco.ios.ios_facts:
+    #     gather_subset: "min"
+    # gather_subset: "config"
+    # gather_network_resources: "all"
+    - name: Set ansible_net_config
+      block:
+        - name: Get Config from NetCMS
+          set_fact:
+            ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
+        - name: Enable NetCMS Check-in
+          set_fact:
+            netcms_enabled: true
+      rescue:
+        - name: Disable NetCMS Check-in
+          set_fact:
+            netcms_enabled: false
+        - name: Get Facts from live device
+          cisco.ios.ios_facts:
+            gather_subset: "config"
+        - name: Show Facts from device (hostname, model, image, version)
+          debug:
+            msg: "DEBUG {{ inventory_hostname }} {{ ansible_net_hostname }} {{ ansible_net_model }} {{ ansible_net_image }} {{ ansible_net_version }}"
+    # - name: Debug version
+    #   debug:
+    #     msg: "DEBUG {{ inventory_hostname }} {{ ansible_net_hostname }} {{ ansible_net_model }} {{ ansible_net_image }} {{ ansible_net_version }}"
+    # - name: Debug Hostvars
+    #   delegate_to: localhost
+    #   blockinfile:
+    #     path: "/var/local/tftp/ansible/{{ inventory_hostname }}.yaml"
+    #     create: true
+    #     block: |
+    #       {{ hostvars[inventory_hostname] | to_yaml }}
+    # - name: debug en line
+    #   debug:
+    #     var: ios_enable_line
+    # NB: setting an enable secret on the CLI in old IOS 12.x used in legacy EagleHeights
+    #     does not work, the CLI rejects the command even when properly formatted
+    #     but it does work over TFTP with CodePusher.  This bug is fixed in newer IOS/IOS-XE
+    - name: Enable Secret IOS
+      cisco.ios.ios_config:
+        running_config: "{{ ansible_net_config }}"
+        before:
+          - "no enable password"
+          - "no enable secret"
+        lines:
+          - "{{ ios_enable_line }}"
+        save_when: never
+      register: enable_output_iosxe
+      notify: "copy running-config startup-config"
+      failed_when: "'ERROR:' in enable_output_iosxe"
+    - name: Local User Account (ios_config)
+      # NB: ios_user module as of 5.3.0 does not use the ansible_net_config
+      #     for parsing, it always issues `show running-config | section username`
+      #     which is inefficient, and it does not parse out the `hashed_password`
+      #     variable to check if the cred is already set, so it will _always_
+      #     attempt to change it, making it useless for audit reporting 8-(
+      cisco.ios.ios_config:
+        running_config: "{{ ansible_net_config }}"
+        # NB: using ios_config to respond to
+        # "This operation will remove all username related configurations with same name.Do you want to continue? [confirm]"
+        # interactive prompt in configure mode using when clause to only operate on configs where the
+        # emerg user has a reversable type7 password
+        before: "no username {{ item.name }} password\r\r"
+        lines: "username {{ item.name }}{{ ' privilege ' + (item.privilege | string) if item.privilege is defined }}{{ ' ' + item.password_type if item.password_type is defined else ' secret'}}{{ ' ' + (item.hashed_password.type | string) + ' ' + item.hashed_password.value if item.hashed_password.value is defined }}"
+        save_when: never
+      register: create_output
+      notify: "copy running-config startup-config"
+      failed_when: "'ERROR:' in create_output"
+      loop: "{{ ios_users }}"
+    - name: Parse users from IOS config
+      ansible.utils.cli_parse:
+        parser:
+          command: "show running-config section username"
+          name: ansible.netcommon.native
+          os: cisco_ios
+        set_fact: cisco_ios_facts
+        text: "{{ ansible_net_config }}"
+    - name: check mode user verification #ios_user module is goofy, removes badd account in real but says "ok" in check
+      when: "ansible_check_mode and item is defined and item.name not in ios_user_list and item.name != 'emerg'"
+      cisco.ios.ios_config:
+        running_config: "{{ ansible_net_config }}"
+        lines: "no username {{ item.name }}{{ ' privilege ' + (item.privilege | string) if item.privilege is defined }}{{ ' ' + item.password_type if item.password_type is defined }}\r\r"
+      loop: "{{ cisco_ios_facts.ios_users }}"
+      register: delete_output
+      failed_when: "'ERROR:' in delete_output"
+    - name: Remove defunct IOS Local User Accounts
+      when: "not ansible_check_mode and item is defined and item.name not in ios_user_list and item.name != 'emerg'"
+      cisco.ios.ios_user:
+        name: "{{ item.name }}"
+        state: "absent"
+      loop: "{{ cisco_ios_facts.ios_users }}"
+      register: delete_output
+      notify: "copy running-config startup-config"
+      failed_when: "'ERROR:' in delete_output"
+    - name: Remove defunct IOS Local User Accounts second pass
+      when: "not ansible_check_mode and item is defined and item.name not in ios_user_list and item.name != 'emerg'"
+      cisco.ios.ios_user:
+        name: "{{ item.name }}"
+        state: "absent"
+      loop: "{{ cisco_ios_facts.ios_users }}"
+      register: delete_output2
+      notify: "copy running-config startup-config"
+      failed_when: "'ERROR:' in delete_output2"
+  handlers:
+    - name: copy running-config startup-config
+      when: "not ansible_check_mode"
+      cisco.ios.ios_command:
+        commands:
+          - "write memory"
+        wait_for: "result[0] contains '[OK]'"
+      ignore_errors: "{{ ansible_check_mode }}"
+    - name: NetCMS Check-in
+      when: "not ansible_check_mode and netcms_enabled"
+      listen: "copy running-config startup-config"
+      command:
+        # chdir: "/home/net/cms/"
+        argv:
+          - "/usr/bin/make"
+          - "-f"
+          - "/home/net/cms/Makefile"
+          - "logmsg=ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
+          - "/home/net/cms/{{ inventory_hostname }}.update"
+      delegate_to: localhost
+
+- name: NXOS Local Users
+  # NB: for testing just limit to one host
+  hosts: sn-*:rn-*
+  gather_facts: false
+  # Ansible collection ansible.netcommon
+  connection: ansible.netcommon.network_cli
+  # Don't need to enable as our service account is auto-enabled
+  # become: yes
+  # become_method: enable
+  serial:
+    - 50
+    - 100
+    # - 500
+  max_fail_percentage: 20
+  vars:
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    ansible_host_key_checking: false
+    # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
+    # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+    # Ansible collection ansible.netcommon and cisco.ios
+    ansible_network_os: "cisco.nxos.nxos"
+    # ansible_network_cli_ssh_type: libssh
+    ansible_network_cli_ssh_type: paramiko
+    # Ansible 2.9 built-in
+    # ansible_network_os: "nxos"
+    ansible_command_timeout: 300
+    ansible_connect_timeut: 300
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    # net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency-' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+    platform_family: "{{ platforms[0].split('-')[0] }}"
+    device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+)', '\\1') | first }}"
+    nxos_user_list: "{{ nxos_users | map(attribute='name') | list }}"
+    # netdevice_inventory: "{{ query('netbox.netbox.nb_lookup', 'devices', api_filter='status=active has_primary_ip=True', api_endpoint=netbox_api, token=netbox_token) }}"
+    # netbox_vlans: "{{ query('netbox.netbox.nb_lookup', 'vlans', api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}"
+    # ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
+    # ansible_net_config: "{{ lookup('file', '/home/net/cms/' + inventory_hostname + '.conf') }}"
+  tasks:
+    # - name: Get Facts
+    #   cisco.nxos.nxos_facts:
+    #     gather_subset: "min"
+    #     # gather_subset: "config"
+    #     # gather_network_resources: "all"
+    #   vars:
+    #     ansible_command_timeout: 30
+    - name: Get Config from NetCMS
+      set_fact:
+        ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
+    - name: Parse users from NXOS config
+      ansible.utils.cli_parse:
+        parser:
+          command: "show running-config section username"
+          name: ansible.netcommon.native
+          os: cisco_nxos
+        set_fact: cisco_nxos_facts
+        text: "{{ ansible_net_config }}"
+#    - name: debug nxos_user_list
+#      when: "item.name not in nxos_user_list"
+#      debug:
+#        var:
+#          - item.name
+#          - item.privilege
+#          - item.password_type
+#          - item.hashed_password
+#          - item.has_role
+#          - item.role
+#      loop: "{{cisco_nxos_facts.nxos_users}}"
+#    - name: debug cisco_nxos_facts.nxos_users
+#      debug:
+#        var: cisco_nxos_facts.nxos_users
+    - name: remove baddies
+      when: "item.name not in nxos_user_list"
+      cisco.nxos.nxos_config:
+        running_config: "{{ ansible_net_config }}"
+        lines: "no username {{ item.name }}"
+      loop: "{{cisco_nxos_facts.nxos_users}}"
+      register: nxos_remove_user
+      changed_when: "'msg' not in nxos_remove_user or 'warning:' in nxos_remove_user.msg"
+      failed_when: "'msg' in nxos_remove_user and 'FAIL' in nxos_remove_user.msg"
+      notify: "copy running-config startup-config"
+#      changed_when: "nxos_remove_user.msg is not defined or 'warning: unable to update SNMP users' in nxos_remove_user.msg"
+#      changed_when: "'warning: unable to update SNMP users' in nxos_remove_user.msg"
+#    - name: debug nxos_remove_user
+#      debug:
+#        var: nxos_remove_user
+#    - name: debug ansible_net_config
+#      debug:
+#        var: ansible_net_config
+#    - name: debug secrets data
+#      debug:
+#        var: 
+#          - "username {{ item.name }} password 5 {{ item.hashed_password }}  role network-admin"
+#          - "username {{ item.name }} role vdc-admin"
+#      loop: "{{ nxos_users }}"
+#    - name: debug group names
+#      debug:
+#        var: group_names
+    - name: Local User Accounts Mangement VDC (nxos_config)
+      when: "'system admin-vdc' in ansible_net_config and not 'no system admin-vdc' in ansible_net_config"
+      cisco.nxos.nxos_config:
+        running_config: "{{ ansible_net_config }}"
+        # before: "no username {{ item.name }}"
+        replace: block
+        lines:
+          - "username {{ item.name }} password 5 {{ item.hashed_password }}  role network-admin"
+          - "username {{ item.name }} role vdc-admin"
+        save_when: never
+      loop: "{{ nxos_users }}"
+      notify: "copy running-config startup-config"
+    - name: Local User Accounts Athletics Mangement VDC (nxos_config)
+      # when: "'tags_mgmt_vdc' not in group_names or 'no system admin-vdc' in ansible_net_config or 'system admin-vdc' not in ansible_net_config"
+      when: "'no system admin-vdc' in ansible_net_config"
+      cisco.nxos.nxos_config:
+        running_config: "{{ ansible_net_config }}"
+        # before: "no username {{ item.name }}"
+        lines:
+          - "username {{ item.name }} password 5 {{ item.hashed_password }}  role network-admin"
+        save_when: never
+      loop: "{{ nxos_users }}"
+      notify: "copy running-config startup-config"
+    - name: Local User Accounts Guest VDC (nxos_config)
+      when: "'tags_mgmt_vdc' in group_names"
+      cisco.nxos.nxos_config:
+        running_config: "{{ ansible_net_config }}"
+        # before: "no username {{ item.name }}"
+        lines:
+          - "username {{ item.name }} password 5 {{ item.hashed_password }}  role vdc-admin"
+        save_when: never
+      loop: "{{ nxos_users }}"
+      notify: "copy running-config startup-config"
+    - name: Local User Accounts (nxos_config)
+      # when: "'tags_mgmt_vdc' not in group_names or 'no system admin-vdc' in ansible_net_config or 'system admin-vdc' not in ansible_net_config"
+      when: "'tags_mgmt_vdc' not in group_names and 'system admin-vdc' not in ansible_net_config"
+      cisco.nxos.nxos_config:
+        running_config: "{{ ansible_net_config }}"
+        # before: "no username {{ item.name }}"
+        lines:
+          - "username {{ item.name }} password 5 {{ item.hashed_password }}  role network-admin"
+        save_when: never
+      loop: "{{ nxos_users }}"
+      notify: "copy running-config startup-config"
+
+  handlers:
+    - name: copy running-config startup-config
+      when: "not ansible_check_mode"
+      cisco.nxos.nxos_command:
+        commands:
+          - "copy running-config startup-config"
+        wait_for: "result[0] contains 'Copy complete'"
+      ignore_errors: "{{ ansible_check_mode }}"
+    - name: NetCMS Check-in
+      when: "not ansible_check_mode"
+      listen: "copy running-config startup-config"
+      command:
+        # chdir: "/home/net/cms/"
+        argv:
+          - "/usr/bin/make"
+          - "-f"
+          - "/home/net/cms/Makefile"
+          - "logmsg=ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
+          - "/home/net/cms/{{ inventory_hostname }}.update"
+      delegate_to: localhost
+      register: netcms_make_update
+      failed_when: "'WARN' in netcms_make_update.stdout"
+
+- name: PaloAlto Local Users
+  # NB: for testing just limit to one host
+  hosts: fp-*:mp-*
+  connection: local
+  gather_facts: false
+  serial:
+    - 50
+    - 100
+  max_fail_percentage: 20
+  vars:
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
+    # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+    ansible_command_timeout: 300
+    ansible_connect_timeout: 300
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    # net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency-' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    provider:
+      ip_address: "{{ ansible_host }}"
+      username: "{{ ansible_user }}"
+      password: "{{ ansible_password }}"
+  tasks:
+    # - name: Get Facts
+    #   paloaltonetworks.panos.panos_facts:
+    #     provider: "{{ provider }}"
+    # - name: debug facts
+    #   debug:
+    #     var: ansible_facts
+    - name: Local User Accounts
+      paloaltonetworks.panos.panos_administrator:
+        provider: "{{ provider }}"
+        admin_username: "{{ item.name }}"
+        admin_phash: "{{ item.hashed_password }}"
+        superuser: true
+        # device_admin: true
+        commit: false
+      notify: commit panos config
+      loop: "{{ panos_users }}"
+  handlers:
+    - name: commit panos config
+      paloaltonetworks.panos.panos_commit_firewall:
+        provider: "{{ provider }}"
+        admins: "{{ ansible_user }}"
+        description: "ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
+        # Only commit the change this playbook makes, not other unrelated changes
+        exclude_policy_and_objects: true
+    # NB: we don't need to check-in because there is automation which triggers on commit
+    #     since PaloAlto is being managed by Panorama and other automation systems
+    #     attepmting to check-in after commit may conflict with the automatic commit process
+
+# FIXME: Alpha DC does this even have local user accounts or only RADIUS
+#        is there a default out-of-the-box admin credential?  I don't see
+#        any likely candidates in the config files in NetCMS
+

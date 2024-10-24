@@ -1,0 +1,45 @@
+- name: get Direct IPs (GraphQL)
+  uri:
+    method: POST
+    url: "{{ netbox_graphql }}"
+    headers:
+      Authorization: "Token {{ netbox_token }}"
+    body_format: json
+    body:
+      query: 'query { device_ips: ip_address_list(device: "{{ inventory_hostname }}") {id address dns_name} vm_ips: ip_address_list(virtual_machine:"{{ inventory_hostname }}") { id address dns_name} }'
+  register: direct_ip_address_list
+  check_mode: false
+# - name: combobulate Direct IPs
+#   set_fact:
+#     direct_ips: "{{ ( direct_ip_address_list.json.data.device_ips + direct_ip_address_list.json.data.vm_ips ) | map(attribute='address') | ansible.utils.ipaddr('address') | list }}"
+
+- name: get FHRP Groups (GraphQL)
+  when: "device_ha | length > 0"
+  uri:
+    method: POST
+    url: "{{ netbox_graphql }}"
+    headers:
+      Authorization: "Token {{ netbox_token }}"
+    body_format: json
+    body:
+      query: 'query { fhrp_group_assignment_list(device: "{{ inventory_hostname }}") {group {id}} }'
+  register: fhrp_group_assignment_list
+  check_mode: false
+- name: combobulate FHRP Group IDs
+  set_fact:
+    fhrp_group_ids: "{{ fhrp_group_assignment_list.json.data.fhrp_group_assignment_list | default([]) | map(attribute='group.id') | list }}"
+- name: get FHRP IPs (GraphQL)
+  when: "fhrp_group_ids | count > 0"
+  uri:
+    method: POST
+    url: "{{ netbox_graphql }}"
+    headers:
+      Authorization: "Token {{ netbox_token }}"
+    body_format: json
+    body:
+      query: "query { ip_address_list(fhrpgroup_id: {{ fhrp_group_ids | to_json }}) {id address dns_name} }"
+  register: fhrp_ip_address_list
+  check_mode: false
+# - name: combobulate FHRP IPs
+#   set_fact:
+#     fhrp_ips: "{{ fhrp_ip_address_list.json.data.ip_address_list | default([]) | map(attribute='address') | ansible.utils.ipaddr('address') | list  }}"

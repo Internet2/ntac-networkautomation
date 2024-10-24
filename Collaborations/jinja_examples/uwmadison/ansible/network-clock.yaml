@@ -1,0 +1,72 @@
+---
+- name: NXOS Timezone
+  # NB: for testing just limit to one host
+  hosts: sn-*:rn-*:!tags_mgmt_vdc
+  gather_facts: false
+  connection: ansible.netcommon.network_cli
+  become: "{{ 'False' if ansible_check_mode else 'True' }}"
+  become_method: ansible.netcommon.enable
+  max_fail_percentage: 10
+  vars:
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
+    # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+    ansible_network_os: "cisco.nxos.nxos"
+    # ansible_network_cli_ssh_type: libssh
+    ansible_network_cli_ssh_type: paramiko
+    # ansible_command_timeout: 300
+    # ansible_connect_timeout: 300
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    # net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency-' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+    # emergency_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency') | from_json }}"
+  tasks:
+    # - name: Get Facts
+    #   nxos_facts:
+    #     gather_subset: "min"
+    #     # gather_subset: "config"
+    #     # gather_network_resources: "all"
+    - name: show clock
+      ansible.utils.cli_parse:
+        command: show clock
+        parser:
+          name: ansible.netcommon.ntc_templates
+          os: cisco_nxos
+        set_fact: clock
+    - name: debug
+      when: "clock[0].timezone == 'UTC'"
+      debug:
+        msg: "{{ inventory_hostname }} timezone configured to {{ clock[0].timezone }}"
+    - name: Reset timezone to CST6CDT
+      when: "clock[0].timezone == 'UTC'"
+      cisco.nxos.nxos_config:
+        # Don't bother comparing to the running-config as they can be out of sync for this config
+        match: "none"
+        lines: "clock timezone CDT -6 0"
+        # Since we are only doing one thing ne need to batch up saving the config
+        save_when: always
+      register: clock_config
+    # - name: Copy running-config startup-config
+    #   when: "clock_config.changed"
+    #   nxos_command:
+    #     commands:
+    #     - command: "copy running-config startup-config"
+    #     wait_for: "result[0] contains 'Copy complete'"
+    #   ignore_errors: "{{ ansible_check_mode }}"
+    # FIXME: we may not need to check anything in becaus the text config may not change.
+    - name: NetCMS Check-in
+      when: "clock_config.changed and not ansible_check_mode"
+      command:
+        # chdir: "/home/net/cms/"
+        argv:
+          - "/usr/bin/make"
+          - "-f"
+          - "/home/net/cms/Makefile"
+          - "logmsg=ansible {{ ansible_play_name }} set to CST by {{ lookup('env', 'LOGNAME') }}"
+          - "/home/net/cms/{{ inventory_hostname }}.update"
+      delegate_to: localhost
+      register: netcms_make_update
+      failed_when: "'WARN' in netcms_make_update.stdout"

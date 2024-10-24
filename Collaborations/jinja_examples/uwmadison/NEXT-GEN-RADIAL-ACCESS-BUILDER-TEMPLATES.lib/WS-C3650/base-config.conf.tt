@@ -1,0 +1,434 @@
+!###########################################
+!#           L a s t  A u d i t            #
+!# mtinberg / 2022-08-17
+!# NB: check WS-C3850/base-config.conf.tt as it
+!#     should be nearly identical
+!#
+!# Version: [% INSERT "package_version.txt" %]
+!###########################################
+!#####  A C L   L I S T    B E L O W   #####
+!###########################################
+![% # FIXME: why are the ACLs listed before the main config %]
+[% FOREACH acl IN management_acl_ipv46 # tftp acl directory in INCLUDE path -%]
+[% SET acl = acl.remove('/var/local/tftp/cisco/acl/') # FIXME: remove path from array as we use INCLUDE_PATH not ABSULUTE -%]
+[% INSERT "$acl" FILTER replace('\nend', "\n!") # NB: regex sees one long string, not lines, so ^ and $ don't work -%]
+[% END -%]
+!###########################################
+!#####  Q O S   L I S T    B E L O W   #####
+!###########################################
+[% FOREACH qos IN qos_acl_ipv4  # tftp qos directory in INCLUDE path -%]
+[% SET qos = qos.remove('/var/local/tftp/cisco/qos/') # FIXME: remove path from array as we use INCLUDE_PATH not ABSULUTE -%]
+[% INSERT "$qos" FILTER replace('\nend', "\n!") # NB: regex sees one long string, not lines, so ^ and $ don't work -%]
+[% END -%]
+!######################################################################
+!######     C A T A L Y S T       3 6 5 0       C O N F I G     #######
+!######################################################################
+
+version 16.12
+no service pad
+service timestamps debug datetime localtime
+service timestamps log datetime localtime
+service password-encryption
+service compress-config
+service call-home
+service unsupported-transceiver
+platform punt-keepalive disable-kernel-core
+!
+hostname [% form_inputs.hostname %]
+!
+vrf definition Mgmt-vrf
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family ipv6
+ exit-address-family
+!
+logging buffered 3000000
+no logging console
+enable secret 8 [% enable_secret.attributes.type8hash %]
+!
+aaa new-model
+!
+aaa group server radius RAD_SERVERS
+ server name netcms1
+ server name netcms2
+!
+aaa authentication login default group RAD_SERVERS local
+aaa authentication enable default enable
+aaa authorization exec default group RAD_SERVERS local 
+aaa accounting exec default start-stop group RAD_SERVERS
+!
+aaa session-id common
+clock timezone CDT -6 0
+clock summer-time CDT recurring
+stack-mac persistent timer 0
+[% # NB: switch # provision $model goes here -%]
+[% # stack-power switch # goes here -%]
+!
+call-home
+ ! If contact email address in call-home is configured as sch-smart-licensing@cisco.com
+ ! the email address configured in Cisco Smart License Portal will be used as contact email address to send SCH notifications.
+ contact-email-addr sch-smart-licensing@cisco.com
+ profile "CiscoTAC-1"
+  active
+  destination transport-method http
+  no destination transport-method email
+!
+!
+ip name-server [% config_context.dns_ipv4.join(" ") %]
+ip domain list net.wisc.edu
+ip domain list local.net.wisc.edu
+ip domain name local.net.wisc.edu
+!
+login delay 1
+login on-failure log
+login on-success log
+!
+vtp mode transparent
+udld aggressive
+no device-tracking logging theft
+no l2 traceroute
+!
+port-channel load-balance src-dst-mixed-ip-port
+system mtu 9198
+[% # licence boot level ipbasek9 -%]
+!
+diagnostic bootup level minimal
+!
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+[% IF device_info.$inventory_hostname.role == 'radial' # FIXME: use device_info.$device_name.role -%]
+spanning-tree vlan 2-4094 priority 16384
+[% END -%]
+!
+archive
+ log config
+  logging enable
+  logging size 500
+  hidekeys
+  notify syslog
+!
+[% # memory free low-watermark processor 79475 -%]
+!
+no errdisable detect cause pagp-flap
+no errdisable detect cause dtp-flap
+no errdisable detect cause l2ptguard
+errdisable recovery cause udld
+errdisable recovery cause bpduguard
+errdisable recovery cause security-violation
+errdisable recovery cause channel-misconfig
+errdisable recovery cause link-flap
+errdisable recovery cause gbic-invalid
+errdisable recovery cause loopback
+errdisable recovery interval 30
+username emerg privilege 15 secret 8 [% emerg_user.attributes.type8hash %]
+!
+redundancy
+ mode sso
+!
+transceiver type all
+ monitoring
+[% # hw-switch switch 1 logging onboard message 
+   # hw-switch switch 2 logging onboard message -%]
+!
+[% IF form_inputs.acl_group == "housing" -%]
+vlan 439
+ name RESNET-VLAN-439
+vlan 435
+ name RESNET-COPYRIGHT-QUARANTINE
+vlan 726
+ name RESNET-SECURITY-QUARANTINE
+vlan 730
+ name HOUSING-ADMIN_4-56-0_23
+[% END -%]
+vlan [% form_inputs.MGMT_VLAN %]
+ name [% form_inputs.MGMT_VLAN_NAME %]
+lldp run
+!
+class-map match-any system-cpp-police-topology-control
+  description Topology control
+class-map match-any system-cpp-police-sw-forward
+  description Sw forwarding, L2 LVX data, LOGGING
+class-map match-any system-cpp-default
+  description EWLC control, EWLC data, Inter FED 
+[% # qos-in-VOICE-BEARER -%]
+class-map match-any system-cpp-police-sys-data
+  description Learning cache ovfl, High Rate App, Exception, EGR Exception, NFL SAMPLED DATA, RPF Failed
+[% # qos-in-VIDEO-BEARER and qos-in-CALL-SIGNALING -%]
+class-map match-any system-cpp-police-punt-webauth
+  description Punt Webauth
+class-map match-any system-cpp-police-l2lvx-control
+  description L2 LVX control packets
+class-map match-any system-cpp-police-forus
+  description Forus Address resolution and Forus traffic
+class-map match-any system-cpp-police-multicast-end-station
+  description MCAST END STATION
+class-map match-any system-cpp-police-multicast
+  description Transit Traffic and MCAST Data
+class-map match-any system-cpp-police-l2-control
+  description L2 control
+class-map match-any system-cpp-police-dot1x-auth
+  description DOT1X Auth
+class-map match-any system-cpp-police-data
+  description ICMP redirect, ICMP_GEN and BROADCAST
+class-map match-any system-cpp-police-stackwise-virt-control
+  description Stackwise Virtual
+class-map match-any non-client-nrt-class
+[% # qos-out-SCAVENGER -%]
+class-map match-any system-cpp-police-routing-control
+  description Routing control and Low Latency
+class-map match-any system-cpp-police-protocol-snooping
+  description Protocol snooping
+class-map match-any system-cpp-police-dhcp-snooping
+  description DHCP snooping
+[% # qos-out-CALL-SIGNALING -%]
+class-map match-any system-cpp-police-system-critical
+  description System Critical and Gold Pkt
+[% # qos-out-VOICE-BEARER and qos-out-VIDEO-BEARER -%]
+!
+policy-map system-cpp-policy
+[% # FIXME: Are any of these default QoS settings required to be defined? -%]
+!
+policy-map port_child_policy
+ class non-client-nrt-class
+  bandwidth remaining ratio 10
+!
+[% FOREACH interface IN po_interfaces.keys.nsort -%]
+[% SWITCH interface -%]
+[% CASE uplink_po_interface -%]
+interface [% po_interfaces.$interface.name %]
+ description [% po_interfaces.$interface.description %]
+ switchport trunk allowed vlan 2-899,1134-4093
+ switchport mode trunk
+[% IF device_info.$inventory_hostname.role == 'access' # node routers don't support dynamic desirable -%]
+ switchport mode dynamic desirable
+[% END -%]
+ logging event link-status
+ logging event trunk-status
+ logging event bundle-status
+ logging event spanning-tree
+ logging event status
+ logging event trunk-status
+ spanning-tree cost [% po_interfaces.$interface.custom_fields.stp_cost %]
+!
+[% CASE downlink_po_interfaces -%]
+interface [% po_interfaces.$interface.name %]
+ description [% po_interfaces.$interface.description %]
+ switchport trunk allowed vlan 2-899,1134-4093
+ switchport mode dynamic desirable
+ logging event link-status
+ logging event trunk-status
+ logging event bundle-status
+ logging event spanning-tree
+ logging event status
+ spanning-tree cost [% po_interfaces.$interface.custom_fields.stp_cost %]
+!
+[% END # SWITCH/CASE interface.name -%]
+[% END # FOREACH po_interfaces -%]
+[% FOREACH stack_pos IN [1 .. form_inputs.height] -%]
+[% FOREACH interface IN device_types.$stack_pos.interfaces -%]
+[% SET name = interface.name.replace("Ethernet1", "Ethernet" _ stack_pos) -%]
+[% SWITCH name -%]
+[% CASE "GigabitEthernet0/0" -%]
+[% # NB: depends on name replacment "Ethernet1" not matching "GigabitEthernet0/0" -%]
+[% # and management interface only shows once in config even though all stack_pos members physically have one -%]
+[% IF stack_pos == 1 -%]
+interface [% name %]
+ vrf forwarding Mgmt-vrf
+ no ip address
+ shutdown
+ negotiation auto
+!
+[% END -%]
+[% CASE uplink_eth_interfaces -%]
+interface [% name %]
+ description [% eth_interfaces.$name.description %]
+ switchport trunk allowed vlan 2-899,1134-4093
+ switchport mode trunk
+[% IF device_info.$inventory_hostname.role == 'access' # node routers don't support dynamic desirable -%]
+ switchport mode dynamic desirable
+[% END -%]
+ logging event link-status
+ logging event trunk-status
+ logging event bundle-status
+ logging event spanning-tree
+ logging event status
+ channel-protocol lacp
+ channel-group [% eth_interfaces.$name.lag.name.replace("Port-channel", "") %] mode active
+ spanning-tree cost [% eth_interfaces.$name.custom_fields.stp_cost %]
+ service-policy output qos-TRUNK-OR-IPT-OUT
+ no shutdown
+!
+[% CASE downlink_eth_interfaces -%]
+interface [% name %]
+ description [% eth_interfaces.$name.description %]
+ switchport trunk allowed vlan 2-899,1134-4093
+ switchport mode dynamic desirable
+ logging event link-status
+ logging event trunk-status
+ logging event bundle-status
+ logging event spanning-tree
+ logging event status
+ channel-protocol lacp
+ channel-group [% eth_interfaces.$name.lag.name.replace("Port-channel", "") %] mode active
+ spanning-tree cost [% eth_interfaces.$name.custom_fields.stp_cost %]
+ service-policy output qos-TRUNK-OR-IPT-OUT
+ no shutdown[% # FIXME: this is not necessary %]
+!
+[% CASE # Default EdgeConf access port for combined radial/access devices in small buildings -%]
+interface [% name %]
+[% IF interface.name.match("Ethernet1/0/") # Only configure front-ports for EdgeConf not uplink-ports
+      && device_info.$inventory_hostname.role == 'access' -%]
+ description :E(,,):M:
+ switchport mode access
+ ip access-group G-T-NoDhcpServer in
+ logging event spanning-tree
+ logging event status
+ power inline never
+ power inline police action log
+ ipv6 traffic-filter G-T-v6NoDhcpServerNoRouterAdv in
+ snmp trap mac-notification change added
+ snmp trap mac-notification change removed
+ no snmp trap link-status
+ storm-control broadcast level pps 1k
+ storm-control action trap
+ no mdix auto
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ spanning-tree guard root
+[% END # IF not uplink module -%]
+ shutdown
+!
+[% END # SWITCH/CASE interface.name -%]
+[% END # FOREACH netbox_interfaces -%]
+[% END # FOREACH stack_pos member -%]
+interface Vlan1
+ no ip address
+ shutdown
+!
+interface Vlan[% form_inputs.MGMT_VLAN %]
+ description [% form_inputs.MGMT_VLAN_DESC %]
+ ip address [% form_inputs.MGMT_SWITCH_IP %] [% form_inputs.MGMT_SUBNET_MASK %]
+ no shutdown[% # FIXME: this is default and not necessary %]
+!
+[% IF form_inputs.MGMT_DEFAULT_GATEWAY != '10.151.90.1' -%]
+ip default-gateway [% form_inputs.MGMT_DEFAULT_GATEWAY %]
+[% END -%]
+ip forward-protocol nd
+no ip http server
+ip http authentication local
+no ip http secure-server
+ip ssh time-out 30
+ip ssh authentication-retries 2
+ip ssh version 2
+[% UNLESS form_inputs.acl_group == "housing" # FIXME: is this an error -%]
+ip tftp blocksize 8192
+[% END -%]
+[% # This is where the named ip access-list standard and extended goes -%]
+!
+[% # NB: skip source-interface statement on radial/access devices with only one IP interface https://kb.wisc.edu/ns/internal/120626 -%]
+logging history size 500
+logging history notifications
+logging trap debugging
+[% FOREACH syslog_host IN config_context.syslog_ipv4 -%]
+logging host [% syslog_host %]
+[% END -%]
+[% # This is where the numberd ip access-list standard goes -%]
+!
+snmp-server community [% snmp_secret.password %] RO G-A-SnmpReadOnly
+snmp-server community [% snmp_secret.enable_password %] RW G-A-SnmpReadWrite
+[% IF form_inputs.acl_group == "housing" -%]
+snmp-server community [% housing_snmp_secret.enable_password %] RW G-A-SnmpReadWriteHousing
+[% END -%]
+snmp-server contact NOC @ +1 608 263-4188
+snmp-server chassis-id [% form_inputs.hostname %]
+snmp-server enable traps mac-notification change move threshold
+[% FOREACH snmptrap_host IN config_context.snmptrap_ipv4 -%]
+snmp-server host [% snmptrap_host %] [% snmptrap_secret.password %] 
+[% END -%]
+!
+radius-server retransmit 1
+radius-server timeout 3
+!
+radius server netcms1
+ address ipv4 [% config_context.radius_ipv4.0 %] auth-port 1812 acct-port 1813
+ key 7 [% radius_secret.enable_password %]
+!
+radius server netcms2
+ address ipv4 [% config_context.radius_ipv4.1 %] auth-port 1812 acct-port 1813
+ key 7 [% radius_secret.enable_password %]
+!
+[% # This is where the ipv6 access-lists go -%]
+[% # FIXME: is this present on some but not a majority of radials
+# control-plane
+#  service-policy input system-cpp-policy
+# !
+-%]
+privilege exec level 1 show logging
+privilege exec level 1 show
+banner motd ~
+          You are connected to the [% form_inputs.hostname %] switch.
+              Unauthorized use or access is prohibited!
+*************************************************************************
+****                                                                 ****
+****            To report problems, please call the                  ****
+****         Network Operations Center at 608-263-4188               ****
+****               or email noc@doit.wisc.edu.                       ****
+****                                                                 ****
+*************************************************************************
+~
+!
+line con 0
+ exec-timeout 60 0
+ logging synchronous
+ stopbits 1
+line aux 0
+ stopbits 1
+line vty 0 4[% # FIXME: send vty access group in config_context variable and remove logic from template %]
+ access-class [% IF form_inputs.acl_group == "housing" %]G-A-AdminAccessHousing[% ELSE %]G-A-AdminAccess[% END %] in
+ exec-timeout 60 0
+ ipv6 access-class G-A-v6AdminAccess in
+ logging synchronous
+line vty 5 15
+ access-class [% IF form_inputs.acl_group == "housing" %]G-A-AdminAccessHousing[% ELSE %]G-A-AdminAccess[% END %] in
+ exec-timeout 60 0
+ ipv6 access-class G-A-v6AdminAccess in
+ logging synchronous
+!
+ntp access-group peer 20
+ntp access-group serve 1
+ntp access-group serve-only 1
+ntp access-group query-only 1
+[% FOREACH ntp_host IN config_context.ntp_ipv4 -%]
+ntp server [% ntp_host %]
+[% END -%]
+!
+[% UNLESS form_inputs.acl_group == "housing" # FIXME: Is this an error -%]
+mac address-table notification change interval 300
+[% END -%]
+mac address-table notification change history-size 500
+mac address-table notification change
+wsma agent exec
+ profile httplistener
+ profile httpslistener
+!
+wsma agent config
+ profile httplistener
+ profile httpslistener
+!
+wsma agent filesys
+ profile httplistener
+ profile httpslistener
+!
+wsma agent notify
+ profile httplistener
+ profile httpslistener
+!
+wsma profile listener httplistener
+ transport http
+!
+wsma profile listener httpslistener
+ transport https
+!
+end

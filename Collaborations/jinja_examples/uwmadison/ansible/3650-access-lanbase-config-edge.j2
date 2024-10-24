@@ -1,0 +1,32 @@
+interface {% interface.name %} 
+ description {% interface.description %}
+ {% if interface.untagged_vlan %}
+ switchport mode access
+ switchport access vlan {{ interface.untagged_vlan.vid }}
+ {% elif interface.mode.label == 'Tagged All' %}
+ switchport mode trunk
+ switchport trunk allowed vlan 2-899,1134-4093 
+ {% endif %}
+ {% if 'enable_VoIP' is subset(interface.tags) %}
+ switchport voip vlan {{ interface.tagged_vlans.[0].vid }}
+ {% endif %}
+ ip access-group G-T-NoDhcpServer in
+ logging event spanning-tree
+ logging event status
+ power inline never
+ power inline police action log
+ ipv6 traffic-filter G-T-v6NoDhcpServerNoRouterAdv in
+ snmp trap mac-notification change added
+ snmp trap mac-notification change removed
+ no snmp trap link-status
+ no mdix auto
+ storm-control broadcast level pps 1k
+ storm-control action trap
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ spanning-tree guard root
+ {% if interface.enabled == True %}
+ no shutdown
+ {% elif interface.enabled == False %}
+ shutdown
+ {% endif %}}

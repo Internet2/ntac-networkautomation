@@ -1,0 +1,232 @@
+---
+- name: IOS Netflow Enable
+  # NB: for testing just limit to one host
+  hosts: r-*
+  gather_facts: false
+  # Ansible collection ansible.netcommon
+  # connection: ansible.netcommon.network_cli
+  # Ansible 2.9 built-in
+  connection: network_cli
+  become: yes
+  become_method: enable
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    # ansible_private_key_file: "/home/net/.ssh/id_rsa"
+    # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+    # Ansible collection ansible.netcommon and cisco.ios
+    # ansible_network_os: "cisco.ios.ios"
+    # ansible_network_cli_ssh_type: libssh
+    # Ansible 2.9 built-in
+    ansible_network_os: "ios"
+    ansible_command_timeout: 300
+    ansible_connect_timeout: 300
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    # net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency-' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+    # platform_family: "{{ platforms[0].split('-')[0] if platforms is defined else 'UNKN' }}"
+    # device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+|n\\dk|n\\d\\d|securesync|sdx|pa|m-\\d+|cordex-cxc|aruba|ap-\\d|poweredge|avocent|equallogic|asr-\\d+|mx\\d+|ex\\d+|srx\\d+|VM)', '\\1') | first if device_types is defined else 'VM' }}"
+    # device_type: "{{inventory_hostname.split('-')[0]}}"
+    # device_ha: "{{ inventory_hostname.split('-')[5]}}"
+  tasks:
+    # - name: Get Facts
+    #   ios_facts:
+    #     gather_subset: "min"
+    - name: Get Config from NetCMS
+      set_fact:
+        ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
+    - name: Enable Netflow
+      ios_config:
+        running_config: "{{ ansible_net_config }}"
+        lines:
+          - mls netflow interface
+          - mls netflow usage notify 95 300
+          - mls flow ip interface-full
+          - mls flow ipv6 interface-full
+        save_when: never
+      notify: "copy running-config startup-config"
+    - name: Check Netflow Exporters
+      ios_config:
+        running_config: "{{ ansible_net_config }}"
+        before:
+          # - "no ip flow-export destination 146.151.144.16 4007"
+          - "no ip flow-export destination 146.151.144.53 4007"
+        lines:
+          # - ip flow-export source Loopback0
+          - ip flow-export version 9
+          # - ip flow-export version 5
+          - "ip flow-export destination {{ netflow_exporters[0].ip }} {{ netflow_exporters[0].port }}"
+          - "ip flow-export destination {{ netflow_exporters[1].ip }} {{ netflow_exporters[1].port }}"
+        save_when: never
+      notify: "copy running-config startup-config"
+  handlers:
+    - name: copy running-config startup-config
+      ios_command:
+        commands:
+          - "write memory"
+        wait_for: "result[0] contains '[OK]'"
+      ignore_errors: "{{ ansible_check_mode }}"
+    - name: NetCMS Check-in
+      listen: "copy running-config startup-config"
+      command:
+        # chdir: "/home/net/cms/"
+        argv:
+          - "/usr/bin/make"
+          - "-f"
+          - "/home/net/cms/Makefile"
+          - "logmsg=ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
+          - "/home/net/cms/{{ inventory_hostname }}.update"
+      delegate_to: localhost
+      register: netcms_make_update
+      failed_when: "'WARN' in netcms_make_update.stdout"
+
+- name: NXOS Netflow Enable
+  # NB: for testing just limit to one host
+  hosts: device_roles_core:device_roles_node:&rn-*
+  gather_facts: false
+  # Ansible collection ansible.netcommon
+  # connection: ansible.netcommon.network_cli
+  # Ansible 2.9 built-in
+  connection: network_cli
+  # SSH auto-enabled via RADIUS and Ansible tries to detect the status using
+  # "show feature privilege" which doesn't exist in NXOS VDC in the lab,
+  # breaking the playbook.  We can ignore this as we are already privileged
+  # If we need this then look in net_user for the ae=0|1 attribute from devinfo
+  become: false
+  # become_method: enable
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    # ansible_private_key_file: "/home/net/.ssh/id_rsa"
+    # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+    # Ansible collection ansible.netcommon and cisco.ios
+    # ansible_network_os: "cisco.ios.ios"
+    # ansible_network_cli_ssh_type: libssh
+    # Ansible 2.9 built-in
+    ansible_network_os: "nxos"
+    ansible_command_timeout: 300
+    ansible_connect_timeout: 300
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    # net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency-' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+  tasks:
+    # - name: Get Facts
+    #   nxos_facts:
+    #     gather_subset: "min"
+    - name: Get Config from NetCMS
+      set_fact:
+        ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
+    - name: Enable Netflow on BGP routers
+      when: "'feature bgp' in ansible_net_config"
+      block:
+        - name: Enable Netflow
+          # nxos_config:
+          #   running_config: "{{ ansible_net_config }}"
+          #   lines: "feature netflow"
+          #   save_when: never
+          notify: "copy running-config startup-config"
+          nxos_feature:
+            feature: netflow
+            state: enabled
+        # FIXME: these could be combined into one task which loops over ["ipv4", "ipv6"]
+        - name: Netflow Record
+          nxos_config:
+            running_config: "{{ ansible_net_config }}"
+            parents: "flow record {{ item }}-Flow-Record"
+            match: line
+            lines:
+              - "match {{ item | lower }} destination address"
+              - match ip protocol
+              - match transport source-port
+              - match transport destination-port
+              - "match {{ item | lower }} source address"
+              - collect routing forwarding-status
+              - "collect routing next-hop address {{ item | lower }}"
+              - collect transport tcp flags
+              - collect counter bytes
+              - collect counter packets
+              - collect timestamp sys-uptime first
+              - collect timestamp sys-uptime last
+            save_when: never
+          notify: "copy running-config startup-config"
+          loop:
+            - IPv4
+            - IPv6
+        - name: Netflow Exporters
+          nxos_config:
+            running_config: "{{ ansible_net_config }}"
+            parents: "flow exporter {{ item.name | upper }}"
+            lines:
+              - "destination {{ item.ip }} use-vrf management"
+              - "transport udp {{ item.port }}"
+              - "source mgmt0"
+              - "version {{ item.version }}"
+            save_when: never
+          loop: "{{ netflow_exporters }}"
+          notify: "copy running-config startup-config"
+        - name: Netflow Monitor
+          nxos_config:
+            running_config: "{{ ansible_net_config }}"
+            replace: block
+            parents: "flow monitor UW-{{ item }}-LAB"
+            lines:
+              - "record {{ item }}-Flow-Record"
+              - "exporter {{ netflow_exporters[0].name | upper }}"
+              - "exporter {{ netflow_exporters[1].name | upper }}"
+            save_when: never
+          notify: "copy running-config startup-config"
+          loop:
+            - IPv4
+            - IPv6
+        - name: Netflow Sampler
+          nxos_config:
+            running_config: "{{ ansible_net_config }}"
+            parents: "sampler {{ item.name }}"
+            lines:
+              - "mode {{ item.mode }}"
+          notify: "copy running-config startup-config"
+          loop:
+            - name: NETFLOW-SAMPLER-512
+              mode: 1 out-of 512
+            - name: NETFLOW-SAMPLER
+              mode: 1 out-of 1
+        - name: Enable Netflow Interfaces
+          loop: "{{ query('netbox.netbox.nb_lookup', 'interfaces', api_filter='brief=true cf_enable_netflow=true device=' + inventory_hostname, api_endpoint=netbox_api, token=netbox_token) }}"
+          nxos_config:
+            running_config: "{{ ansible_net_config }}"
+            before:
+              - "interface {{ item.value.name }}"
+              - "no ip flow monitor UW-IPv4-DEFAULT input sampler NETFLOW-SAMPLER-512"
+            parents: "interface {{ item.value.name }}"
+            lines: "ip flow monitor UW-IPv4-LAB input sampler NETFLOW-SAMPLER"
+          notify: "copy running-config startup-config"
+
+  handlers:
+    - name: copy running-config startup-config
+      nxos_command:
+        commands:
+          - "copy running-config startup-config"
+    - name: NetCMS Check-in
+      listen: "copy running-config startup-config"
+      command:
+        # chdir: "/home/net/cms/"
+        argv:
+          - "/usr/bin/make"
+          - "-f"
+          - "/home/net/cms/Makefile"
+          - "logmsg=ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
+          - "/home/net/cms/{{ inventory_hostname }}.update"
+      delegate_to: localhost
+      register: netcms_make_update
+      failed_when: "'WARN' in netcms_make_update.stdout"
+# NB: this platform is on the way out so probably isn't worth building
+# - name: IOS-XE Netflow Enable
+
+# FIXME: Add JunOS config, read from template in /usr/local/uwsysnet-iptrack/etc/configdata
+# - name: JunOS Netflow Enable

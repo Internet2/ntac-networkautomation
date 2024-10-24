@@ -1,0 +1,41 @@
+---
+- name: OpenNMS Dummy Testhosts
+  hosts: localhost
+  become: false
+  gather_facts: false
+  connection: local
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    opennms_devinfo: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j opennms-qa') | from_json }}"
+    opennms_api: "{{ opennms_devinfo.connection_method + '://' + opennms_devinfo.attributes.host + ':' + opennms_devinfo.attributes.port + '/opennms/rest' }}"
+
+  tasks:
+    - name: Provision Test Requisitoin
+      loop: "{{ range(1, 129) | list }}"
+      uri:
+        method: POST
+        url: "{{ opennms_api }}/requisitions/Test/nodes"
+        headers:
+          Accept: "application/json"
+        # NB: requisitions responds with 202 Accepted when adding new nodes
+        status_code:
+          - 200
+          - 201
+          - 202
+        # Don't require two requests for each request (401 then 202)
+        force_basic_auth: True
+        url_username: "{{ opennms_devinfo.username }}"
+        url_password: "{{ opennms_devinfo.password }}"
+        body_format: json
+        body:
+          foreign-id: "XMLTest{{ '%04d' | format(item) }}"
+          node-label: "XMLTest{{ '%04d' | format(item) }}"
+          interface:
+            - ip-addr: 2607:f388:f:c:20c:29ff:fe63:4896
+              snmp-primary: P
+              status: 1
+              monitored-service:
+                - service-name: ICMP
+                - service-name: HTTP-APITest
+          category:
+            - Test

@@ -1,0 +1,72 @@
+---
+- name: Get Facts IOS/IOS-XE
+  hosts: r-*:s-*:t-*
+  become: false
+  gather_facts: false
+  connection: ansible.netcommon.network_cli
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    ansible_host_key_checking: false
+    ansible_network_os: "cisco.ios.ios"
+    ansible_network_cli_ssh_type: paramiko
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+  tasks:
+    - name: Get IOS Facts
+      cisco.ios.ios_facts:
+      #  gather_subset: "min"
+    # - name: debug
+    #   debug:
+    #     var: hostvars[inventory_hostname]
+
+- name: Get Facts NXOS
+  hosts: rn-*:sn-*
+  become: false
+  gather_facts: false
+  connection: ansible.netcommon.network_cli
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    ansible_host_key_checking: false
+    ansible_network_os: "cisco.nxos.nxos"
+    ansible_network_cli_ssh_type: paramiko
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+  tasks:
+    - name: Get NXOS Facts
+      cisco.nxos.nxos_facts:
+      #  gather_subset: "min"
+    # - name: debug
+    #   debug:
+    #     var: hostvars[inventory_hostname]
+
+
+
+- name: Get Facts Linux
+  hosts: redhat:debian
+  become: false
+  gather_facts: false
+  vars:
+    acl_netcms_ipv4: "[{% for device in ( groups['netcms'] | intersect(groups[site_environment]) ) %}{% if hostvars[device]['primary_ip4'] is defined %}\"{{ hostvars[device]['primary_ip4'] }}\"{{ ',' if loop.nextitem is defined }}{% endif %}{% endfor %}]"
+    acl_netcms_ipv6: "[{% for device in ( groups['netcms'] | intersect(groups[site_environment]) ) %}{% if hostvars[device]['primary_ip6'] is defined %}\"{{ hostvars[device]['primary_ip6'] }}\"{{ ',' if loop.nextitem is defined }}{% endif %}{% endfor %}]"
+    acl_netcms_ipv46: "{{ acl_netcms_ipv4 + acl_netcms_ipv6 }}"
+  tasks:
+    - name: debug hostvars
+      debug:
+        var: hostvars[inventory_hostname]
+    - name: debug4
+      debug:
+        var: acl_netcms_ipv4
+    - name: debug6
+      debug:
+        var: acl_netcms_ipv6
+    - name: debug46
+      debug:
+        var: acl_netcms_ipv46

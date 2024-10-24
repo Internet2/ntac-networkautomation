@@ -1,0 +1,380 @@
+<pre>
+######################################################################
+######            4 5 0 0 X      P R O C E S S                  ######
+######################################################################
+
+
+Check the above Parameters, If correct bring the box up on the Sandbox vlan"
+-----------------------------------------------------------------------------
+
+enable
+conf t
+interface FastEthernet1
+ip address [% form_inputs.sandbox_IP_1 %] 255.254.0.0
+no shut
+exit
+ip tftp source-interface Fa1
+end
+write memory
+!end paste here.
+
+!-- After int Fa1 comes up, verify network connectivity:
+
+enable
+ping vrf mgmtVrf [% tftpserver %]
+
+! If you cannot ping the peleus IP above, go back to the VSS process:
+</pre>
+<h2>Catalyst 4500X VSS Code Upgrade Process</h2>
+
+<dl class="dl-horizontal">
+    <dt>PROM_IMAGE</dt>
+    <dd>[% config_context.ios_rommon %]&nbsp;</dd>
+    <dt>PROM_VERSION</dt>
+    <dd>[% config_context.ios_rommon_version %]&nbsp;</dd>
+    <dt>CURRENT_CODE_IMAGE</dt>
+    <dd>[% config_context.ios_bin %]&nbsp;</dd>
+    <dt>CURRENT_CODE_VERSION</dt>
+    <dd>[% config_context.ios_version %]&nbsp;</dd>
+    <dt>sandbox_IP_1</dt>
+    <dd>[% form_inputs.sandbox_IP_1 %]&nbsp;</dd>
+    <dt>sandbox_IP_2</dt>
+    <dd>[% form_inputs.sandbox_IP_2 %]&nbsp;</dd>
+    <dt>VSS_DOMAIN_ID</dt>
+    <dd>[% form_inputs.VSS_DOMAIN_ID %]&nbsp;</dd>
+</dl>
+
+<span class="bg-info"><strong>*** "wr erase", "erase cat4000_flash:" and reload if needed prior to starting code upgrade
+        process! ***</strong></span>
+
+<H4>[1] Connect pair of 4500X switches to the sandbox network via int Fa1 and have console access to each one</H4>
+<pre>
+<strong>On Switch# 1:</strong>
+
+enable
+conf t
+interface FastEthernet1
+ip address [% form_inputs.sandbox_IP_1 %] 255.254.0.0 
+ip tftp source-interface Fa1
+end
+wr mem
+
+<span class="bg-info">!-- After int Fa1 comes up, verify network connectivity:</span>
+
+ping vrf mgmtVrf [% netcms_config.tftpsandbox %]
+
+
+<strong>On Switch# 2:</strong>
+
+enable
+conf t
+interface FastEthernet1
+ip address [% form_inputs.sandbox_IP_2 %] 255.254.0.0 
+ip tftp source-interface Fa1
+end
+wr mem
+
+<span class="bg-info">!-- After int Fa1 comes up, verify network connectivity:</span>
+
+ping vrf mgmtVrf [% netcms_config.tftpsandbox %]
+
+</pre>
+
+<H4>[2] Verify PROM version and upgrade if needed</H4>
+<pre>
+<strong>On both Switch# 1 and Switch# 2:</strong>
+
+show version | in ROM:
+
+<span class="bg-info">
+!-- Current version is [% config_context.ios_rommon_version %].
+!-- If upgrade required,
+!-- a) Copy PROM image to bootflash:/
+</span>
+
+copy tftp://[% netcms_config.tftpsandbox %]/cisco/[% config_context.ios_rommon %] bootflash:
+
+<span class="bg-info">!-- b) Reload switch</span>
+<span class="bg-info">!-- c) During reboot, <strong>enter ^C</strong> when promoted to break boot sequence</span>
+<span class="bg-info">!-- d) From ROMMON type &gt;&gt;</span>
+
+boot bootflash:[% config_context.ios_rommon %]
+
+<span class="bg-info">!-- ...code should then update and device will reboot</span>
+
+</pre>
+
+<H4>[3] Verify OS version and upgrade if needed</H4>
+<pre>
+<strong>On both Switch# 1 and Switch# 2:</strong>
+
+show version | in RELEASE
+
+<span class="bg-info">
+!-- Current version is [% config_context.ios_version %].
+!-- If upgrade required,</span>
+!--  Copy .bin images to bootflash:/
+</span>
+
+enable
+copy tftp://[% netcms_config.tftpsandbox %]/cisco/[% config_context.ios_bin %] bootflash:
+
+</pre>
+
+<H4>[4] Remove any old PROM/OS versions and set config-register</H4>
+<pre>
+<strong>On both Switch# 1 and Switch# 2:</strong>
+
+dir
+
+<span class="bg-info">
+!-- These are the only images that should be loaded on the switches:
+!--
+!--       PROM file:     [% config_context.ios_rommon %]
+!--       IOS XE file:   [% config_context.ios_bin %]
+!--
+!-- Remove any other versions.
+</span>
+
+
+<span class="bg-info">!-- Update config-register:</span>
+
+conf t
+config-register 0x2101
+end
+wr mem
+
+<span class="bg-info">!-- <strong>reload</strong> before starting the VSS conversion process</span>
+
+</pre>
+
+<H2> VSS Conversion Process </H2>
+<pre>
+<span class="bg-info">
+    !-- At least 1 of the following 4 VSL links will need to be connected:
+    !--
+    !-- Switch# 1, int Te1/1/1 &lt;-- VSL link 1 --&gt; Switch# 2, int Te1/1/1
+    !-- Switch# 1, int Te1/1/2 &lt;-- VSL link 2 --&gt; Switch# 2, int Te1/1/2
+    !-- Switch# 1, int Te1/1/15 &lt;-- VSL link 3 --&gt; Switch# 2, int Te1/1/15
+    !-- Switch# 1, int Te1/1/16 &lt;-- VSL link 4 --&gt; Switch# 2, int Te1/1/16
+</span>
+</pre>
+
+<H4>[1] Verify that switches are not already in VSS mode</H4>
+
+<pre>
+<strong>On both Switch# 1 and Switch# 2:</strong>
+
+enable
+switch convert mode stand-alone
+
+<span class="bg-info">!-- Output should resemble:</span>
+
+!--  switch is already in standalone mode
+
+<span class="bg-info">
+!-- ...otherwise, enter "yes" to confirm.
+!-- After conversion, the switch(es) will reload.
+</span>
+
+</pre>
+
+<H4>[2] Configure domain and switch numbers</H4>
+
+<pre>
+<strong>On Switch# 1:</strong>
+
+enable
+conf t
+switch virtual domain [% form_inputs.VSS_DOMAIN_ID %]
+switch 1
+exit
+
+<strong>On Switch# 2:</strong>
+
+enable
+conf t
+switch virtual domain [% form_inputs.VSS_DOMAIN_ID %]
+switch 2
+exit
+
+</pre>
+
+<H4>[3] Configure VSL / Dual-active ports and port-channels</H4>
+
+<pre>
+<strong>On Switch# 1:</strong>
+
+interface po63
+ description VSL top switch
+ switchport
+ switch virtual link 1
+ no shut
+!
+interface range te1/1-2
+ shut
+ description VSL
+ switchport
+ channel-group 63 mode on
+ no shut
+!
+interface range te1/15-16
+ shut
+ description VSL
+ switchport
+ channel-group 63 mode on
+ no shut
+end
+wr mem
+
+<strong>On Switch# 2:</strong>
+
+interface po64
+ description VSL bottom switch
+ switchport
+ switch virtual link 2
+ no shut
+!
+interface range te1/1-2
+ shut
+ description VSL
+ switchport
+ channel-group 64 mode on
+ no shut
+!
+interface range te1/15-16
+ shut
+ description VSL
+ switchport
+ channel-group 64 mode on
+ no shut
+end
+wr mem
+
+</pre>
+
+
+<H4>[4] Convert switches to VSS</H4>
+
+<pre>
+<strong>On both Switch# 1 and Switch# 2:</strong>
+
+switch convert mode virtual
+
+<span class="bg-info">
+!-- Enter "<strong>yes</strong>" to confirm.
+!-- Press &lt; Enter &gt; to save converted config to bootflash:
+!-- or "<strong>^C</strong>" to cancel.
+!-- ...switches will reload and become VSS pair.
+</span>
+
+</pre>
+
+<H4>[5] Verify switches are running as VSS pair</H4>
+<pre>
+<strong>On master Switch:</strong>
+
+show switch virtual
+
+<span class="bg-info">!-- Output will resemble:</span>
+
+!-- Executing the command on VSS member switch role = VSS Active, id = 1
+!-- 
+!-- 
+!-- Switch mode                  : Virtual Switch
+!-- Virtual switch domain number : [% form_inputs.VSS_DOMAIN_ID %]
+!-- Local switch number          : 1
+!-- Local switch operational role: Virtual Switch Active
+!-- Peer switch number           : 2
+!-- Peer switch operational role : Virtual Switch Standby
+!-- 
+!-- Executing the command on VSS member switch role = VSS Standby, id = 2
+!-- 
+!-- 
+!-- Switch mode                  : Virtual Switch
+!-- Virtual switch domain number : [% form_inputs.VSS_DOMAIN_ID %]
+!-- Local switch number          : 2
+!-- Local switch operational role: Virtual Switch Standby
+!-- Peer switch number           : 1
+!-- Peer switch operational role : Virtual Switch Active
+
+</pre>
+
+<H4>[6] Delete unneeded files</H4>
+<pre>
+<strong>On master Switch:</strong>
+
+enable
+del /force bootflash:startup-config.saved*
+del /force slavebootflash:startup-config.saved*
+del /force bootflash:startup-config.converted*
+del /force slavebootflash:startup-config.converted*
+
+</pre>
+
+
+<pre>
+TFTP configuration to switch:
+-----------------------------------------------------------------------------
+On master Switch:
+
+enable
+copy tftp: startup-config
+[% tftpserver %]
+cisco/base/[% form_inputs.hostname %].conf
+startup-config
+
+enable
+copy tftp: bootflash:
+[% tftpserver %]
+cisco/base/[% form_inputs.hostname %].conf
+tftp-config
+
+
+
+Reload both switches:
+-----------------------------------------------------------------------------
+On master Switch:
+
+enable
+redundancy reload shelf
+
+
+
+After reload is complete, re-apply config to running-config:
+-----------------------------------------------------------------------------
+On master Switch:
+
+copy bootflash: running-config
+tftp-config
+running-config
+write memory
+
+
+
+Delete unneeded files:
+-----------------------------------------------------------------------------
+On master Switch:
+
+enable
+del /force bootflash:startup-config.saved*
+del /force slavebootflash:startup-config.saved*
+del /force bootflash:startup-config.converted*
+del /force slavebootflash:startup-config.converted*
+del /force bootflash:tftp-config
+del /force slavebootflash:tftp-config	
+
+
+
+
+Generate crypto Key and Finalize Config:
+-----------------------------------------------------------------------------
+On master Switch:
+
+enable
+conf t
+crypto key generate rsa general-keys modulus 1024
+end
+wr mem
+!end paste here.
+</pre>
