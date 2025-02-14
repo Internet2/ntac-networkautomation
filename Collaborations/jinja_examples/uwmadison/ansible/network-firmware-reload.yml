@@ -3,12 +3,9 @@
   # NB: for testing just limit to one host
   hosts: s-*:r-*
   gather_facts: false
-  # Ansible collection ansible.netcommon
-  # connection: ansible.netcommon.network_cli
-  # Ansible 2.9 built-in
-  connection: network_cli
+  connection: ansible.netcommon.network_cli
   become: true
-  # become_method: "enable"
+  become_method: ansible.netcommon.enable
   # What is a good number to have enough hosts to test but not so many that
   # a failure is disruptive?
   serial:
@@ -22,11 +19,8 @@
     ansible_host_key_auto_add: true
     # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
     # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
-    # Ansible collection ansible.netcommon and cisco.ios
-    # ansible_network_os: "cisco.ios.ios"
     # ansible_network_cli_ssh_type: libssh
-    # Ansible 2.9 built-in
-    ansible_network_os: "ios"
+    ansible_network_os: "cisco.ios.ios"
     ansible_command_timeout: 300
     # ansible_connection_timeout: 300
     net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
@@ -44,6 +38,40 @@
     device_number_even: "{{ inventory_hostname.split('-')[3] | int is even }}"
     device_number_odd: "{{ inventory_hostname.split('-')[3] | int is odd}}"
     device_batch_evenodd: "{{ evenodd == 'all' or (evenodd == 'odd' and device_number_odd ) or (evenodd == 'even' and device_number_even ) }}"
+    __doc__: |
+      Reboot IOS into new Firmware after staging
+
+      Further documentation is found in [network-firmware](network-firmware.md) playbook
+
+      Uses `vars_prompt` to allow configuring a future time to reload at to support tight maintenance windows
+
+      Also contains a jinja filter expression which parses the device name to determine if the position_number
+      is even or odd, so that batches of non-HA devices can have staggered reboots which may improve
+      availability of downstream devices in some limited circumstances.  Mostly provided as an example as
+      this hasn't been used in production.
+
+      Hosts default to `doit_needsreboot: false` and become eligible for reboot if the installed OS is newer
+      than the currently booted OS.
+
+      Batches of explicit hosts can be created by passing a file with a list of devices names (one per line)
+      using `--limit @filename`
+
+      To prevent a failed deployment from bricking a larger number of devices than our field services can handle
+      we serialize this play in an initial batch of *50* devices with a `max_fail_percentage: 20` which means
+      that if 10 or more devices fail to complete the first batch the playbook run fails.  Subsequent batches
+      are in groups of 100 devices at a time, with failure of 20 or more in a single batch failing the playbook.
+      Tuning the batch sizes and permissable failure percentage between the competing interests of completing
+      a disruptive change quickly (more parallelization), or the risk of a bad firmware not visible in testing
+      creating unmanagable disruption, is always open for debate among the network engineers.
+
+      Each platform and version has its own command structure for checking and updating firmware
+      between IOS and IOS-XE 3.x, 15.x, 16.x, 17.x and between hardware platforms like Cat3xxx/4xxx/9xxx.
+
+      - NB: This is a common style for Ansible IOS upgrade scripting
+        - https://networkproguide.com/example-ansible-playbook-for-updating-cisco-ios-switches/
+        - https://gdykeman.github.io/2018/06/26/ios-upgrades/
+        - https://blog.sys4.de/ansible-upgrade-ios-en.html
+
   vars_prompt:
     - name: reload_time
       prompt: "Catalyst: Scheduled reload time 'HH:MM' (Hit ENTER to skip if you want to reload now)"
@@ -54,12 +82,9 @@
       private: false
 
   tasks:
-    # NB: This is a common style for Ansible IOS upgrade scripting
-    # https://networkproguide.com/example-ansible-playbook-for-updating-cisco-ios-switches/
-    # https://gdykeman.github.io/2018/06/26/ios-upgrades/
-    # https://blog.sys4.de/ansible-upgrade-ios-en.html
+
     - name: GATHER SWITCH FACTS
-      ios_facts:
+      cisco.ios.ios_facts:
         gather_subset: "min"
       vars:
         ansible_command_timeout: 30
@@ -67,7 +92,9 @@
       when: "ansible_net_version != config_context[0].ios_version and ansible_net_model is regex('^WS-C4500') and device_batch_evenodd"
       block:
         - name: Check bootflash for IOS-XE and ROMMON
-          ios_command:
+          vars:
+            __doc__: "Failure is checked in set_facts below so we don't need to fail here to not reboot unintended hosts"
+          cisco.ios.ios_command:
             commands:
               - command: "verify /md5 bootflash:{{ config_context[0].ios_bin }}"
               - command: "verify /md5 bootflash:{{ config_context[0].ios_rommon }}"
@@ -75,7 +102,6 @@
             wait_for:
               - "result[0] contains {{ config_context[0].ios_md5 }}"
               - "result[1] contains {{ config_context[0].ios_rommon_md5 }}"
-          # Failure is checked in set_facts below so we don't need to fail here to not reboot unintended hosts
           ignore_errors: true
           # ignore_errors: "{{ ansible_check_mode }}"
           register: doit_check_firmware
@@ -96,7 +122,8 @@
             doit_needsreboot: true
           changed_when: true
     - name: Catalyst IOS-XE family reboot eligibility (C9300, C9300X)
-      # FIXME: should we match on "ansible_net_version is version('17.01.01', 'gt')" instead of model regex
+      vars:
+        __doc__: "FIXME: should we match on `ansible_net_version is version('17.01.01', 'gt')` instead of model regex"
       when: "ansible_net_version != config_context[0].ios_version and ansible_net_model is regex('^C9300X?') and device_batch_evenodd"
       block:
         - name: show install summary
@@ -112,7 +139,7 @@
             msg: "{{ inventory_hostname }} booted {{ ansible_net_version }} intended {{ config_context[0].ios_version }} installed {{ cisco_ios_facts.ansible_installed_versions | to_yaml }}"
 
         - name: Set reboot flag if intended version is installed and inactive
-          when: "cisco_ios_facts.ansible_installed_versions[ config_context[0].ios_version ] == 'I'"
+          when: "cisco_ios_facts.ansible_installed_versions[config_context[0].ios_version] == 'I'"
           set_fact:
             doit_needsreboot: true
           changed_when: true
@@ -157,7 +184,7 @@
           changed_when: true
     - name: Schedule Reboot At a time if provisioned firmware does not match booted
       when: "':' in reload_time and doit_needsreboot"
-      ios_command:
+      cisco.ios.ios_command:
         commands:
           - command: "reload at {{ reload_time }}"
     - name: Reboot in 2m and verfiy update if provisioned firmware does not match booted
@@ -171,9 +198,14 @@
         #       - command: "show archive config differences"
         #     wait_for: "result contains 'No changes were found'"
         - name: NetCMS Check for unexpected config diff
+          vars:
+            __doc__: |
+              Looks for `WARN` or diff output in NetCMS make .check as a failure, should be no diff in text config
+
+              FIXME: IOS-XE 16.x may show config diffs for embedded PKI certs if using `show archive config differences`
+              FIXME: NetCMS Makefile .check target may be sensitive to CWD and should have improved path handling (with readlink/dirname or `${CMSDIR}`)
           become: false
           command:
-            # FIXME: this calls .update target and is sensitive to CWD
             chdir: "/home/net/cms/"
             argv:
               - /usr/bin/make
@@ -201,7 +233,7 @@
               command: "install activate"
               prompt: "Do you want to proceed"
         - name: Perform "reload in 2" for IOS <= 16.x and "install activate" for IOS > 17.x estimate 10-15 minutes
-          ios_command:
+          cisco.ios.ios_command:
             commands:
               - command: "write memory"
               - command: "{{ reload_command.command }}"
@@ -211,13 +243,13 @@
             ansible_command_timeout: 3600
         - name: WAIT FOR SWITCH TO RETURN
           wait_for:
-            host: "{{inventory_hostname}}"
+            host: "{{ inventory_hostname }}"
             port: 22
             delay: 180
             timeout: 3600
           delegate_to: localhost
         - name: Gather Facts post-reboot
-          ios_facts:
+          cisco.ios.ios_facts:
             gather_subset: "min"
 
         - name: ASSERT THAT THE IOS VERSION IS CORRECT
@@ -227,7 +259,7 @@
             msg: "IOS version {{ ansible_net_version }} does not match compliant version {{ config_context[0].ios_version }}. Upgrade unsuccessful."
           ignore_errors: "{{ ansible_check_mode }}"
         - name: copy running-config startup-config
-          ios_command:
+          cisco.ios.ios_command:
             commands:
               - "write memory"
             wait_for: "result[0] contains '[OK]'"
@@ -247,7 +279,7 @@
           failed_when: "'WARN' in netcms_make_update.stdout"
         - name: Commit new version and clean up old versions to free up flash (IOS-XE 17.x)
           when: "ansible_net_version is version('17', 'gt') and ansible_net_version is version('18', 'lt') and ansible_net_model is regex('^(C9300X?-|WS-C3[68]50)')"
-          ios_command:
+          cisco.ios.ios_command:
             commands:
               - command: "install commit"
               - command: "install remove inactive"
@@ -256,7 +288,7 @@
             # wait_for: "result[0] contains 'SUCCESS'"
         - name: Clean up old versions to free up flash (IOS-XE 16.x)
           when: "ansible_net_version is version('16', 'gt') and ansible_net_version is version('17', 'lt') and ansible_net_model is regex('^(C9300X?-|WS-C3[68]50)')"
-          ios_command:
+          cisco.ios.ios_command:
             commands:
               - command: "request platform software package clean switch all file flash:"
                 prompt: "Do you want to proceed"
@@ -264,7 +296,7 @@
             # wait_for: "result[0] contains 'SUCCESS'"
         - name: Clean up old versions to free up flash (IOS-XE 15.x aka 3.x)
           when: "ansible_net_version is version('16.01.01', 'lt') and ansible_net_model is regex('^(C9300X?-|WS-C3[68]50)')"
-          ios_command:
+          cisco.ios.ios_command:
             commands:
               - command: "software clean force"
         - name: Clean up BOOT vars and ROMMON on WS-4500X
@@ -279,7 +311,7 @@
                 set_fact: cisco_ios_facts
             - name: Remove ROMMON upgrade from BOOT var
               when: "cisco_ios_facts.ansible_boot_variable is defined and config_context[0].ios_rommon_bin in cisco_ios_facts.ansible_boot_variable"
-              ios_config:
+              cisco.ios.ios_config:
                 lines:
                   - "no boot system flash bootflash:{{ config_context[0].ios_rommon_bin }}"
                 save_when: modified
@@ -295,12 +327,9 @@
 - name: Nexus NXOS Install NXOS, BIOS, EPLD and reload devices with newer installed firmware
   hosts: sn-*:rn-*:!tags_mgmt_vdc
   gather_facts: false
-  # Ansible collection ansible.netcommon
-  # connection: ansible.netcommon.network_cli
-  # Ansible 2.9 built-in
-  connection: network_cli
+  connection: ansible.netcommon.network_cli
   become: true
-  # become_method: enable
+  become_method: ansible.netcommon.enable
   serial:
     - 50
     - 100
@@ -331,13 +360,35 @@
     # ansible_net_config: "{{ lookup('file', '/home/net/cms/' + inventory_hostname + '.conf') }}"
     doit_needsreboot: false
     doit_settle_down: 120
+    __doc__: |
+      Reboot NXOS into new Firmware after staging
+
+      Further documentation is found in [network-firmware](network-firmware.md) playbook
+
+      *NB*: Firmware updates do not apply to vDC guest OS instances, only the mangement vDC is updated
+            additionally SSH connections are auto-enabled, Ansible network_cli nxos enable code
+            will attempt to run `show` commands which don't exist in guest vDC and fail.
+            Netbox Device inventory has a manually applied `mgmt_vdc` tag if the record is for a vDC
+            so that they can be excluded when necessary.  We aren't yet using the newer Netbox
+            vDC model, vDC instances are treated as if they were independant Devices when that isn't
+            exactly accurate, but works well enough for most of our tooling.
+
+      Parallelization batch size set to `serial: [20, 100]` with `max_fail_percentage: 20`
+
+      `ansible_connect_timeout: 1800` set high as some firmware updates make the supervisor unresponsive
+      and take a long time but it should wait before treating this as a failure.
+
+      Many `wait_for` invocations will keep trying for up to an *hour* for the device to come back
+      as we've seen in practice that some firmware updates can take a _long_ time but are not failed.
+
+      - NB: This is a common style for Ansible IOS upgrade scripting
+        - https://networkproguide.com/example-ansible-playbook-for-updating-cisco-ios-switches/
+        - https://gdykeman.github.io/2018/06/26/ios-upgrades/
+        - https://blog.sys4.de/ansible-upgrade-ios-en.html
+      - FIXME: move variables to shared `hosts.yml` inventory and not duplicated at play-local level
   tasks:
-    # NB: This is a common style for Ansible IOS upgrade scripting
-    # https://networkproguide.com/example-ansible-playbook-for-updating-cisco-ios-switches/
-    # https://gdykeman.github.io/2018/06/26/ios-upgrades/
-    # https://blog.sys4.de/ansible-upgrade-ios-en.html
     - name: GATHER SWITCH FACTS
-      nxos_facts:
+      cisco.nxos.nxos_facts:
         gather_subset:
           - "min"
           - "hardware"
@@ -355,7 +406,7 @@
             set_fact: cisco_nxos_facts
         - name: Check bootflash for NXOS
           when: "config_context[0].nxos_bin is defined"
-          nxos_command:
+          cisco.nxos.nxos_command:
             commands:
               - command: "show file bootflash:/{{ config_context[0].nxos_bin }} md5sum"
             retries: 1
@@ -365,7 +416,7 @@
           register: doit_check_firmware_nxos
         - name: Check bootflash for Kickstart
           when: "config_context[0].nxos_kickstart_bin is defined"
-          nxos_command:
+          cisco.nxos.nxos_command:
             commands:
               - command: "show file bootflash:/{{ config_context[0].nxos_kickstart_bin }} md5sum"
             retries: 1
@@ -375,7 +426,7 @@
           register: doit_check_firmware_kickstart
         - name: Check bootflash for EPLD
           when: "config_context[0].nxos_epld_bin is defined"
-          nxos_command:
+          cisco.nxos.nxos_command:
             commands:
               - command: "show file bootflash:/{{ config_context[0].nxos_epld_bin }} md5sum"
             retries: 1
@@ -397,9 +448,13 @@
       when: "doit_needsreboot"
       block:
         - name: NetCMS Check for unexpected config diff
+          vars:
+            __doc__: |
+              NetCMS WARN when running-config does not match startup-config and '***************' which is part of the diff header
+              FIXME: this calls .update target and is sensitive to CWD
           become: false
           command:
-            # FIXME: this calls .update target and is sensitive to CWD
+
             chdir: "/home/net/cms/"
             argv:
               - /usr/bin/make
@@ -408,46 +463,51 @@
               - "/home/net/cms/{{ inventory_hostname }}.check"
           delegate_to: localhost
           register: netcms_make_check
-          # NetCMS WARN when running-config does not match startup-config and '***************' which is part of the diff header
           failed_when: "'WARN' in netcms_make_check.stdout or '***************' in netcms_make_check.stdout"
           changed_when: false
           tags:
             - make_check
         - name: Install NXOS Base OS and BIOS
+          vars:
+            __doc__: |
+              FIXME: Only operating on N9K with staged installed firmware ready to boot
+                    we may need to break Nexus N[567][7K] into seperate play or block
+                    to ensure that we don't cut our legs off updating one platform
+                    that another device in the same play depends on.  I'm not sure
+                    the install command can be successfully staged on N[567][7K] so
+                    it might take a variable time to run, causing some hosts to reboot
+                    while others are still installing.
           block:
-            # FIXME: Only operating on N9K with staged installed firmware ready to boot
-            #        we may need to break Nexus N[567][7K] into seperate play or block
-            #        to ensure that we don't cut our legs off updating one platform
-            #        that another device in the same play depends on.  I'm not sure
-            #        the install command can be successfully staged on N[567][7K] so
-            #        it might take a variable time to run, causing some hosts to reboot
-            #        while others are still installing.
             - name: Install NXOS N9K with reboot option
-              # Skip install command if provisioned file in show boot matches intended version to install
+              vars:
+                ansible_command_timeout: 900
+                __doc__: |
+                  Skip install command if provisioned file in show boot matches intended version to install
+                  Not checking result text because command may not return to prompt and reboot instead
+                  so the automation can't know if the command completed successfully or not.  This often
+                  results in the command _always_ timing out, taking the *maximum* time allowed by the timeout.
               when: "ansible_net_platform is regex('^N[39]K-') and cisco_nxos_facts.ansible_boot_image != 'bootflash:/' + config_context[0].nxos_bin"
-              nxos_command:
+              cisco.nxos.nxos_command:
                 commands:
                   - command: "install all nxos bootflash:/{{ config_context[0].nxos_bin }}"
                     prompt: '\?'
                     answer: "y"
                 # wait_for:
                 #   - "result[0] contains 'Install has been successful.'"
-              vars:
-                ansible_command_timeout: 900
               register: doit_install_firmware
               ignore_errors: "{{ ansible_check_mode }}"
               changed_when: true
             - name: WAIT FOR SWITCH TO RETURN
               when: "ansible_net_platform is regex('^N[39]K-') and cisco_nxos_facts.ansible_boot_image != 'bootflash:/' + config_context[0].nxos_bin"
               wait_for:
-                host: "{{inventory_hostname}}"
+                host: "{{ inventory_hostname }}"
                 port: 22
                 delay: 60
                 timeout: 3600
               delegate_to: localhost
             - name: Install NXOS (N5K, N6K, N7K, N77) with reboot option
               when: "ansible_net_platform is regex('^N[567][K7]-')"
-              nxos_command:
+              cisco.nxos.nxos_command:
                 commands:
                   - command: "install all kickstart bootflash:/{{ config_context[0].nxos_kickstart_bin }} system bootflash:/{{ config_context[0].nxos_bin }}"
                     prompt: '\?'
@@ -463,7 +523,7 @@
             - name: WAIT FOR SWITCH TO RETURN
               when: "ansible_net_platform is regex('^N[567][K7]-')"
               wait_for:
-                host: "{{inventory_hostname}}"
+                host: "{{ inventory_hostname }}"
                 port: 22
                 delay: 60
                 timeout: 3600
@@ -473,7 +533,7 @@
           block:
             - name: Install EPLD N5K N6K N7K N77
               when: "ansible_net_platform is regex('^N[567][K7]-')"
-              nxos_command:
+              cisco.nxos.nxos_command:
                 commands:
                   - command: "install all epld bootflash:/{{ config_context[0].nxos_epld_bin }}"
                     prompt: '\?'
@@ -484,14 +544,14 @@
             - name: WAIT FOR SWITCH TO RETURN
               when: "ansible_net_platform is regex('^N[567][K7]-')"
               wait_for:
-                host: "{{inventory_hostname}}"
+                host: "{{ inventory_hostname }}"
                 port: 22
                 delay: 60
                 timeout: 3600
               delegate_to: localhost
             - name: Install EPLD N9K N3K
               when: "ansible_net_platform is regex('^N[39]K-')"
-              nxos_command:
+              cisco.nxos.nxos_command:
                 commands:
                   - command: "install epld bootflash:/{{ config_context[0].nxos_epld_bin }} module all"
                     prompt: '\?'
@@ -502,14 +562,14 @@
             - name: WAIT FOR SWITCH TO RETURN
               when: "ansible_net_platform is regex('^N[39]K-')"
               wait_for:
-                host: "{{inventory_hostname}}"
+                host: "{{ inventory_hostname }}"
                 port: 22
                 delay: 60
                 timeout: 3600
               delegate_to: localhost
             - name: Install EPLD Golden N9K
               when: "ansible_net_platform is regex('^N[39]K-')"
-              nxos_command:
+              cisco.nxos.nxos_command:
                 commands:
                   - command: "install epld bootflash:/{{ config_context[0].nxos_epld_bin }} module all golden"
                     prompt: '\?'
@@ -520,22 +580,25 @@
             - name: WAIT FOR SWITCH TO RETURN
               when: "ansible_net_platform is regex('^N[39]K-')"
               wait_for:
-                host: "{{inventory_hostname}}"
+                host: "{{ inventory_hostname }}"
                 port: 22
                 delay: 60
                 timeout: 3600
               delegate_to: localhost
         - name: Gather Facts post-reboot
-          nxos_facts:
+          cisco.nxos.nxos_facts:
             gather_subset: "min"
         - name: Reload devices which haven't already reloaded from EPLD or install
           when: "ansible_net_version != config_context[0].nxos_version"
           block:
-            # NB: NXOS on the N9K has a reload timer <5-60 sec> command like Catalyst reload in
-            #     but this is not on the older Nexus even running NXOS 8.x, on those reloads are immediate
             - name: Reload N[39]K
+              vars:
+                __doc__: |
+                  NB: NXOS on the N9K has a reload timer <5-60 sec> command like Catalyst reload in
+                      but this is not on the older Nexus even running NXOS 8.x, on those reloads are immediate
+
               when: "ansible_net_platform is regex('^N[39]K-') and cisco_nxos_facts.ansible_boot_image == 'bootflash:/' + config_context[0].nxos_bin"
-              nxos_command:
+              cisco.nxos.nxos_command:
                 commands:
                   - command: "reload timer 30"
                     prompt: '\?'
@@ -544,15 +607,15 @@
               changed_when: true
             - name: WAIT FOR SWITCH TO RETURN
               wait_for:
-                host: "{{inventory_hostname}}"
+                host: "{{ inventory_hostname }}"
                 port: 22
                 delay: 60
                 timeout: 3600
               delegate_to: localhost
             - name: Gather Facts post-reboot
-              nxos_facts:
+              cisco.nxos.nxos_facts:
                 gather_subset: "min"
-        - name: ASSERT THAT THE IOS VERSION IS CORRECT
+        - name: ASSERT THAT THE NXOS VERSION IS CORRECT
           assert:
             that:
               - "ansible_net_version is version(config_context[0].nxos_version, 'eq')"
@@ -563,14 +626,19 @@
           set_fact:
             doit_settle_down: 600
         - name: WAIT FOR SWITCH TO Settle Down
+          vars:
+            __doc__: |
+              NXOS devices take a highly variable amount if time to initialize all hardware,
+              and SSH can become available _long_ before the line-cards have fully booted,
+              we wait so as not to commit a partially missing config
           wait_for:
-            host: "{{inventory_hostname}}"
+            host: "{{ inventory_hostname }}"
             port: 22
             delay: "{{ doit_settle_down }}"
             timeout: "{{ doit_settle_down + 300 }}"
           delegate_to: localhost
         - name: copy running-config startup-config
-          nxos_command:
+          cisco.nxos.nxos_command:
             commands:
               - command: "copy running-config startup-config"
             wait_for: "result[0] contains 'Copy complete'"
@@ -588,9 +656,13 @@
           delegate_to: localhost
           register: netcms_make_update
           failed_when: "'WARN' in netcms_make_update.stdout"
-# Convert to highest level of password hashing supported
+
 - name: Local User accounts setup
+  vars:
+    __doc__: "Convert to highest level of password hashing supported after new OS is applied (Useful for IOS 12 -> IOS 15 conversions)"
   import_playbook: network-users.yml
-# Configure added VTYs
+
 - name: Configure VTY stanzas
+  vars:
+    __doc__: "Configure added VTYs, sometimes the new OS version pre-creates more VTYs by default, ensure they have ACLs"
   import_playbook: network-vty.yml

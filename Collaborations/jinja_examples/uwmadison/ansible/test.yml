@@ -1,4 +1,13 @@
 ---
+- name: Fileglob test
+  hosts: netcms3-lab.doit.wisc.edu:fido3-lab.doit.wisc.edu
+  gather_facts: false
+  tasks:
+    - name: debug glob
+      debug:
+        msg: "Entry is {{ item }} with basename {{ item | basename }} edited {{ item | basename | splitext | first  }} for {{ inventory_hostname }}"
+      loop: "{{ query('fileglob', 'templates/' + role + '/unison-cron/sitelocal_config/*.j2') }}"
+
 - name: JunOS config test
   hosts: rj-cssclabqa-*
   gather_facts: false

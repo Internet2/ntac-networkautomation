@@ -21,6 +21,12 @@
     netbox_devinfo: "{{ lookup('pipe','/usr/local/ns/bin/devinfo -j netbox-prod') | from_json }}"
     netbox_api: "{{ netbox_devinfo.connection_method }}://{{ netbox_devinfo.attributes.host }}:{{ netbox_devinfo.attributes.port }}/"
     netbox_token: "{{ netbox_devinfo.password }}"
+    __doc__: |
+      EXPERIMENTAL
+
+      Ad-hoc method to run `show logging` on a selected list of hosts
+      similar to LookingGlass, used during NetLOG migration to ensure
+      logs from OOB devices were safely archived
   tasks:
     - name: catalyst show logging
       cisco.ios.ios_command:
@@ -54,6 +60,12 @@
     netbox_devinfo: "{{ lookup('pipe','/usr/local/ns/bin/devinfo -j netbox-prod') | from_json }}"
     netbox_api: "{{ netbox_devinfo.connection_method }}://{{ netbox_devinfo.attributes.host }}:{{ netbox_devinfo.attributes.port }}/"
     netbox_token: "{{ netbox_devinfo.password }}"
+    __doc__: |
+      EXPERIMENTAL
+
+      Ad-hoc method to run `show logging` on a selected list of hosts
+      similar to LookingGlass, used during NetLOG migration to ensure
+      logs from OOB devices were safely archived
   tasks:
     - name: nexus show logging
       cisco.nxos.nxos_command:

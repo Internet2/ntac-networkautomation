@@ -1,11 +1,12 @@
 ---
 roles:
-  - name: mtinberg.netbox
-    src: https://github.com/mtinberg/ansible-role-netbox.git
-    version: old-netbox-3.0
+  # DEPRECATED EL7 playbook
+  #  - name: mtinberg.netbox
+  #    src: https://github.com/mtinberg/ansible-role-netbox.git
+  #    version: old-netbox-3.0
   - name: lae.netbox
     src: https://github.com/lae/ansible-role-netbox.git
-    version: "v1.0.6"
+    version: "v1.0.7"
   # https://github.com/geerlingguy/ansible-role-postgresql
   - name: geerlingguy.postgresql
     version: 3.5.0
@@ -14,43 +15,58 @@ roles:
 collections:
   # https://galaxy.ansible.com/ui/repo/published/netbox/netbox/docs/
   - name: netbox.netbox
-    # FIXME: Latest requires Ansible >+ 2.10 and Python >= 3.8,
-    #        not Ansible 2.9 on Python 3.6 in EL7
-    # version: 3.17.0 Latest
-    # version: 3.5 requires Ansible >= 2.10, python >= 3.8 and pynetbox >= 5.0.4 (supports pynetbox 6.4.0 for netbox 3.1+ features)
+    # version: 3.20.0 Latest as of 2025-01-29
+    # version: 3.19.0 Requires Ansible >= 2.15 and Python >= 3.10
+    #          RHEL9 system python is 3.9 and ansible-core 2.14
+    # version: 3.18.0 Requires Ansible >= 2.10 with packaging or
+    #          Ansible >= 2.12 with vendored packaging
+    #          Python >= 3.8 (RHEL9 system python is 3.9 and ansibel-core 2.14)
+    # version: 3.5 requires Ansible >= 2.10, python >= 3.8 and
+    #           pynetbox >= 5.0.4 (supports pynetbox 6.4.0 for netbox 3.1+ features)
     # version: 3.2.0 requires python >= 3.6 and pynetbox >= 5.0.4, packaging (on Ansible 2.9)
     #          pynetbox >= 5.0.4 requires python >= 3.8
-    version: 3.17.0
+    version: 3.18.0
   # https://galaxy.ansible.com/ui/repo/published/ansible/netcommon/docs/
   - name: ansible.netcommon
-    version: 5.3.0
+    # version: 6.1.3 last that works with ansible-core 2.14
+    version: 6.1.3
   # https://galaxy.ansible.com/ui/repo/published/ansible/utils/docs/
   - name: ansible.utils
-    version: 2.11.0
+    # version: 4.1.0 last that works with ansible-core 2.14
+    version: 4.1.0
   # https://galaxy.ansible.com/ui/repo/published/ansible/posix/docs/
   - name: ansible.posix
+    # version: 1.5.4 last that works with ansible-core 2.14
     version: 1.5.4
   - name: community.general
+    # version: 9.5.4 last that works with ansible-core 2.14
+    version: 9.5.4
   - name: community.postgresql
+    # version: 3.4.1 last that works with ansible-core 2.14
+    version: 3.4.1
   - name: community.mysql
   # https://galaxy.ansible.com/ui/repo/published/community/crypto/docs/
   - name: community.crypto
-    version: 2.15.1
+    # version: 2.24.0 last that works with ansible-core 2.14, cryptography < 3.4
+    version: 2.24.0
   # https://galaxy.ansible.com/ui/repo/published/arubanetworks/aos_switch/docs/
   # - name: arubanetworks.aos_switch
   #   version: 1.7.0
   # https://galaxy.ansible.com/ui/repo/published/cisco/ios/docs/
   - name: cisco.ios
-    version: 5.3.0
+    # version: 8.0.0 last that works with ansible-core 2.14
+    version: 8.0.0
   # https://galaxy.ansible.com/ui/repo/published/cisco/nxos/docs/
   - name: cisco.nxos
-    version: 5.3.0
+    # version: 8.1.0 last that works with ansible-core 2.14
+    version: 8.1.0
   # https://galaxy.ansible.com/ui/repo/published/junipernetworks/junos/docs/
   - name: junipernetworks.junos
-    version: 5.3.0
+    # version: 8.0.0 last that works with ansible-core 2.14
+    version: 8.0.0
   # https://galaxy.ansible.com/ui/repo/published/paloaltonetworks/panos/docs/
   - name: paloaltonetworks.panos
-    version: 2.17.4
+    version: 2.21.3
   # https://galaxy.ansible.com/ui/repo/published/citrix/adc/docs/
   # - name: citrix.adc
   #   version: 1.2.0

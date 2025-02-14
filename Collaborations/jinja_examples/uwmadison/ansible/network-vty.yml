@@ -35,7 +35,17 @@
     # ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
     # ansible_net_config: "{{ lookup('file', '/home/net/cms/' + inventory_hostname + '.conf') }}"
     cisco_vty_config:
+    __doc__: |
+      Audit IOS VTY to ensure all have ACLs defined
 
+      Newer IOS/IOS-XE firmware may pre-configure additional VTY instances by default
+      which could end up without an ACL
+
+      IOS configuration for VTYs is based on ranges so this playbook uses `when:`
+      statements for the most common ranges so config only applies if those stansas
+      already exist.  If we have a device with a different `line vty # #` range
+      then we'd have to add it as it wouldn't be detected without adding a bunch
+      of parsing logic which we didn't take the time to do when this was created.
   tasks:
     - name: Set ansible_net_config
       block:
@@ -138,5 +148,3 @@
           - "logmsg=ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
           - "/home/net/cms/{{ inventory_hostname }}.update"
       delegate_to: localhost
-
-

@@ -23,6 +23,56 @@
     ansible_password: "{{ net_user.password }}"
     ansible_become_password: "{{ net_user.enable_password }}"
     # emergency_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency') | from_json }}"
+    __doc__: |
+      Set Timezone on NXOS devices
+
+      FIXME: migrate play-local variables to shared `hosts.yml`
+
+      NB: This doesn't use handlers to only save config and check-in if something
+      has been changed, this currently uses a `when:` clause to check whether
+      the `nxos_config` module has run, which itself checks the parsed config
+      data from `show clock`, which connects to the device and shows current state
+      and doens't actually use the NetCMS saved config to determine if the device
+      needs to be configured.
+
+      ```yaml
+      all:
+        vars:
+          ansible_network_import_modules: true
+          ansible_host_key_auto_add: true
+          ansible_host_key_checking: false
+          net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+        children:
+          nxos:
+            children:
+              nxos_9:
+                children:
+                  platforms_nxos_9_37a:
+                vars:
+              nxos_7:
+                children:
+                  platforms_nxos_7_30n11:
+                  platforms_nxos_7_35d11:
+                  platforms_nxos_7_37n11b:
+                  platforms_nxos_7_38n11:
+                vars:
+              nxos_8:
+                children:
+                  platforms_nxos_8_43:
+                vars:
+              platforms_nxos:
+            vars:
+              # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
+              # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+              ansible_network_os: "cisco.nxos.nxos"
+              # ansible_network_cli_ssh_type: libssh
+              # ansible_network_cli_ssh_type: paramiko
+              # ansible_command_timeout: 300
+              # ansible_connect_timeout: 300
+              ansible_user: "{{ net_user.username }}"
+              ansible_password: "{{ net_user.password }}"
+              ansible_become_password: "{{ net_user.enable_password }}"
+      ```
   tasks:
     # - name: Get Facts
     #   nxos_facts:
@@ -56,7 +106,7 @@
     #     - command: "copy running-config startup-config"
     #     wait_for: "result[0] contains 'Copy complete'"
     #   ignore_errors: "{{ ansible_check_mode }}"
-    # FIXME: we may not need to check anything in becaus the text config may not change.
+
     - name: NetCMS Check-in
       when: "clock_config.changed and not ansible_check_mode"
       command:

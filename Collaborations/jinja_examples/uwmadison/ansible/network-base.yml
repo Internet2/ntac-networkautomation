@@ -12,14 +12,61 @@
     device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+)', '\\1') | first }}"
     snmp_community: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j snmp-' + inventory_hostname) | from_json }}"
     radius_secret: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j radius-' + inventory_hostname) | from_json }}"
-    # interfaces: "{{ query('netbox.netbox.nb_lookup', 'interfaces', api_filter='device=' + inventory_hostname, api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}" 
-  tasks: 
+    # interfaces: "{{ query('netbox.netbox.nb_lookup', 'interfaces', api_filter='device=' + inventory_hostname, api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}"
+    __doc__: |
+      Experimental early playbook to test initial setup on APC platform
+
+      Set `connection: local` so that all playbook tasks execute on control node,
+      not target node as we don't have a CLI module for the APC CLI capable of issuing
+      commands at this time.  We do use the `expect:` built-in module with `sshpass`
+      to create an interactive login and issue commands to it, which *does* work.
+
+      - FIXME: Needs to be refactored for current Ansible connection methods
+        and available `hosts.yml` variables, removing playbook-local vars.
+      - FIXME: Linter complains about use of `ignore_errors: true` instead of `failed_when:`
+        as well as commands without a `changed_when:`
+      - TODO: check in final config to NetCMS
+      - NB: we are skipping SSL cert signing and just using the built-in self-signed cert until we have a way
+          to automate provisoining, LetsEncrypt won't work as long as local.net.wisc.edu is not accessible off-campus
+          and getting individual CSRs signed by InCommon, along with yearly renewals, is too labor intensive for the value
+      - TODO: Fetch CSR /ssl/nmc.csr
+        - Submit CSR for signing (right now servercertificates.wisc.edu to submit and email to receive)
+        - Put signed cert in right filename, rerun playbook
+        - Put Cert in /ssl/cert.crt (or /ssl/nmc.crt)
+        - Interactively Expect "ssl cert -i /ssl/cert.crt"
+
+      ```yaml
+      - name: Check for SSL CSR
+        stat:
+          path: /var/local/tftp/ansible/certificates/{{ inventory_hostname }}.csr
+        register: aos_csr
+      - name: Check for SSL Cert
+        stat:
+          path: /var/local/tftp/ansible/certificates/{{ inventory_hostname }}.crt
+        register: aos_cert
+
+      - name: Get SSL CSR (NMC3)
+        when: "device_family in ['ap964'] and aos_csr.stat is defined"
+        ignore_errors: True
+        # failed_when: "'someerr' in result"
+        environment:
+          SSHPASS: "{{ security_user.password }}"
+        expect:
+          command: "sshpass -e ssh {{ security_user.username }}@{{ inventory_hostname }}"
+          responses:
+            'apc>':
+              - "ssl csr -CN {{ inventory_hostname }} -O \"University of Wisconsin-Madison\" -C US -O OCIS"
+              - "exit"
+      ```
+
+
+  tasks:
     - name: Debug
       blockinfile:
-          path: "/var/local/tftp/ansible/{{ inventory_hostname }}.yaml"
-          create: True
-          block: |
-            {{ hostvars[inventory_hostname] | to_yaml }}
+        path: "/var/local/tftp/ansible/{{ inventory_hostname }}.yaml"
+        create: true
+        block: |
+          {{ hostvars[inventory_hostname] | to_yaml }}
     - name: Provision Base Config
       template:
         # backup: yes
@@ -35,10 +82,11 @@
         apc_user:
           username: "apc"
           password: "apc"
+        __doc__: "FIXME: variables can be shared in `hosts.yml` and not duplicated"
       block:
         - name: Get Current AOS version (NMC3)
           when: "device_family in ['ap964']"
-          ignore_errors: True
+          ignore_errors: true
           # failed_when: "'someerr' in result"
           environment:
             SSHPASS: "{{ security_user.password }}"
@@ -50,11 +98,12 @@
                 - "exit"
           register: apc_aos_about
         - name: Debug AOS about
-          debug: var=apc_aos_about
+          debug:
+            var: apc_aos_about
 
         - name: Parse AOS version (NMC3)
           when: "device_family in ['ap964']"
-          ansible.netcommon.cli_parse:
+          ansible.utils.cli_parse:
             text: "{{ apc_aos_about.stdout }}"
             parser:
               name: ansible.netcommon.native
@@ -62,15 +111,16 @@
               command: about
             set_fact: apc_aos_facts
         - name: Debug AOS get_facts
-          debug: var=apc_aos_facts
+          debug:
+            var: apc_aos_facts
 
         - name: Provision User CSR (NMC2 NMC3)
-          when: 
+          when:
           template:
             dest: "/var/local/tftp/ansible/{{ inventory_hostname }}-users.csf"
             src: "network/base/{{ platform_family }}-users.j2"
         - name: Reset Config to Defaults (NMC2 NMC3)
-          ignore_errors: True
+          ignore_errors: true
           # register: result
           # failed_when: "'someerr' in result"
           environment:
@@ -85,7 +135,7 @@
                 - "YES"
         - name: WAIT FOR APC TO RETURN
           wait_for:
-            host: "{{inventory_hostname}}"
+            host: "{{ inventory_hostname }}"
             port: 22
             delay: 60
             timeout: 900
@@ -94,6 +144,8 @@
           when: "device_family in ['ap964', 'ap963']"
           environment:
             SSHPASS: "{{ security_user.password }}"
+          vars:
+            __doc__: "FIXME: ansible.netcommon.net_get might be able to SCP"
           command:
             argv:
               - "sshpass"
@@ -116,9 +168,11 @@
 
         - name: Install AOS Firmware with SCP (NMS3)
           when: "device_family in ['ap964'] and apc_aos_facts.ansible_net_os.aos is version(config_context[0].aos_version, 'ne')"
-          ignore_errors: True
+          ignore_errors: true
           environment:
             SSHPASS: "{{ security_user.password }}"
+          vars:
+            __doc__: "FIXME: ansible.netcommon.net_get might be able to SCP"
           command:
             argv:
               - "sshpass"
@@ -128,14 +182,14 @@
               - "{{ security_user.username }}@{{ inventory_hostname }}:"
         - name: WAIT FOR APC TO RETURN
           wait_for:
-            host: "{{inventory_hostname}}"
+            host: "{{ inventory_hostname }}"
             port: 22
             delay: 60
             timeout: 900
           delegate_to: localhost
         - name: Get Current AOS version (NMC3)
           when: "device_family in ['ap964']"
-          ignore_errors: True
+          ignore_errors: true
           # failed_when: "'someerr' in result"
           environment:
             SSHPASS: "{{ security_user.password }}"
@@ -147,11 +201,12 @@
                 - "exit"
           register: apc_aos_about
         - name: Debug AOS about
-          debug: var=apc_aos_about
+          debug:
+            var: apc_aos_about
 
         - name: Parse AOS version (NMC3)
           when: "device_family in ['ap964']"
-          ansible.netcommon.cli_parse:
+          ansible.utils.cli_parse:
             text: "{{ apc_aos_about.stdout }}"
             parser:
               name: ansible.netcommon.native
@@ -159,7 +214,8 @@
               command: about
             set_fact: apc_aos_facts
         - name: Debug AOS get_facts
-          debug: var=apc_aos_facts
+          debug:
+            var: apc_aos_facts
         - name: ASSERT THAT THE AOS VERSION IS CORRECT
           assert:
             that:
@@ -168,9 +224,11 @@
 
         - name: Load AOS config.ini with SCP (NMC3)
           when: "device_family in ['ap964']"
-          ignore_errors: True
+          ignore_errors: true
           environment:
             SSHPASS: "{{ security_user.password }}"
+          vars:
+            __doc__: "FIXME: use ansible.netcommon.net_put instead if possible"
           command:
             argv:
               - "sshpass"
@@ -191,39 +249,8 @@
         #       - "ftp://{{ inventory_hostname }}/config.ini"
         - name: WAIT FOR APC TO RETURN
           wait_for:
-            host: "{{inventory_hostname}}"
+            host: "{{ inventory_hostname }}"
             port: 22
             delay: 60
             timeout: 900
           delegate_to: localhost
-        # TODO: check in final config to NetCMS
-        
-        # NB: we are skipping SSL cert signing and just using the built-in self-signed cert until we have a way
-        #     to automate provisoining, LetsEncrypt won't work as long as local.net.wisc.edu is not accessible off-campus
-        #     and getting individual CSRs signed by InCommon, along with yearly renewals, is too labor intensive for the value
-        # - name: Check for SSL CSR
-        #   stat:
-        #     path: /var/local/tftp/ansible/certificates/{{ inventory_hostname }}.csr
-        #   register: aos_csr
-        # - name: Check for SSL Cert
-        #   stat:
-        #     path: /var/local/tftp/ansible/certificates/{{ inventory_hostname }}.crt
-        #   register: aos_cert
-
-        # - name: Get SSL CSR (NMC3)
-        #   when: "device_family in ['ap964'] and aos_csr.stat is defined"
-        #   ignore_errors: True
-        #   # failed_when: "'someerr' in result"
-        #   environment:
-        #     SSHPASS: "{{ security_user.password }}"
-        #   expect:
-        #     command: "sshpass -e ssh {{ security_user.username }}@{{ inventory_hostname }}"
-        #     responses:
-        #       'apc>':
-        #         - "ssl csr -CN {{ inventory_hostname }} -O \"University of Wisconsin-Madison\" -C US -O OCIS"
-        #         - "exit"
-        # TODO: Fetch CSR /ssl/nmc.csr
-        # Submit CSR for signing (right now servercertificates.wisc.edu to submit and email to receive)
-        # Put signed cert in right filename, rerun playbook
-        # Put Cert in /ssl/cert.crt (or /ssl/nmc.crt)
-        # Interactively Expect "ssl cert -i /ssl/cert.crt"

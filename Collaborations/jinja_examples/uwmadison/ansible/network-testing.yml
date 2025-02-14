@@ -10,7 +10,7 @@
     ansible_user: "{{ net_user.username }}"
     ansible_password: "{{ net_user.password }}"
     # Use modules from ansible-galaxy collection arubanetworks.aos_switch https://github.com/aruba/aos-switch-ansible-collection
-    ansible_connection: network_cli
+    ansible_connection: ansible.netcommon.network_cli
     ansible_network_os: arubanetworks.aos_switch.arubaoss
     # Use Ansible 2.9 built-in modules
     # ansible_connection: local
@@ -19,6 +19,10 @@
 
     aruba_route_cache_ip: "10.140.0.1"
     aruba_route_cache_regex: "{{ aruba_route_cache_ip }}\\s+"
+    __doc__: |
+      EXPERIMENTAL Ad-hoc playbook to `show datapath route-cache` finding issues with Aruba switching software.
+
+      FIXME: move variables from play-local to `hosts.yml` inventory file
   tasks:
     # Facts not in the built-in arubaos support, only aruba_command and aruba_config
     # others installed via ansible galaxy
@@ -47,11 +51,9 @@
   # hosts: sn-*:rn-*:!tags_mgmt_vdc
   gather_facts: false
   # Ansible collection ansible.netcommon
-  # connection: ansible.netcommon.network_cli
-  # Ansible 2.9 built-in
-  connection: network_cli
-  become: yes
-  become_method: enable
+  connection: ansible.netcommon.network_cli
+  become: true
+  become_method: ansible.netcommon.enable
   # serial:
   #   - "1%"
   #   - "50%"
@@ -64,11 +66,8 @@
     # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
     # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
     # Ansible collection ansible.netcommon and cisco.ios
-    # ansible_network_os: "cisco.ios.ios"
+    ansible_network_os: "cisco.ios.ios"
     # ansible_network_cli_ssh_type: libssh
-    # Ansible 2.9 built-in
-    # ansible_network_os: "nxos"
-    ansible_network_os: "ios"
     ansible_command_timeout: 300
     net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
     ansible_user: "{{ net_user.username }}"
@@ -89,6 +88,8 @@
     # device_batch_evenodd: "{{ evenodd == 'all' or (evenodd == 'odd' and device_number_odd ) or (evenodd == 'even' and device_number_even ) }}"
     connected_devices: "{{ query('netbox.netbox.nb_lookup', 'interfaces', api_filter='device=' + inventory_hostname + ' cabled=True', api_endpoint=netbox_api, token=netbox_token) | map(attribute='value.cable_peer.device.name') | list}}"
     connected_access_devices: "{{ connected_devices | select('contains', '-access') | list }}"
+    __doc__: |
+      EXPERIMENTAL WIP and scratchpad playbook
   # vars_prompt:
   #   - name: evenodd
   #     prompt: "Only process even/odd device position number (Hit ENTER to use default all) (all|odd|even)"
@@ -147,7 +148,7 @@
     #   debug:
     #     msg: "{{ inventory_hostname }} model {{ ansible_net_platform }} version {{ ansible_net_version }} bios {{ cisco_nxos_facts.ansible_bios_version }}"
 
-    
+
     # NB: This is a common style for Ansible IOS upgrade scripting
     # https://networkproguide.com/example-ansible-playbook-for-updating-cisco-ios-switches/
     # https://gdykeman.github.io/2018/06/26/ios-upgrades/

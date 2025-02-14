@@ -4,7 +4,7 @@
   gather_facts: false
   connection: ansible.netcommon.network_cli
   # Should be auto-enabled
-  become:  "{{ 'False' if ansible_check_mode else 'True' }}"
+  become: "{{ 'False' if ansible_check_mode else 'True' }}"
   become_method: "ansible.netcommon.enable"
   serial:
     - 50
@@ -31,6 +31,54 @@
     ansible_user: "{{ net_user.username }}"
     ansible_password: "{{ net_user.password }}"
     ansible_become_password: "{{ enable_secret.password }}"
+    __doc__: |
+      Set HTTP proxy config if Smart Licensing requires it as managed network devices ACLs
+      prevent direct access to/from the Internet.
+
+      FIXME: migrate playbook-local variables to shared `hosts.yml` to reduce duplication
+
+      ### Example Ansible Inventory
+      ```yaml
+      all:
+        vars:
+          ansible_network_import_modules: true
+          ansible_host_key_auto_add: true
+          ansible_host_key_checking: false
+          net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+          emergency_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency') | from_json }}"
+          cms_service_ipv4: "192.0.2.101"
+          cms_service_ipv6: "2001:db6::101"
+        children:
+          test:
+            vars:
+              cms_service_ipv4: "192.168.42.21"
+              cms_service_ipv6: ""
+          qa:
+            vars:
+              cms_service_ipv4: "146.151.144.26"
+              cms_service_ipv6: "2607:f388:2:2000::1038"
+          ios_17:
+            children:
+              # Inherited from Netbox inventory Device record Platform field.
+              platforms_iosxe_bengaluru_17_06_03:
+              platforms_iosxe_bengaluru_17_06_05:
+              platforms_iosxe_17_6_5:
+              platforms_iosxe_cupertino_17_09_03:
+              platforms_iosxe_dublin_17_12_02:
+              platforms_iosxe_dublin_17_12_03:
+            vars:
+              # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
+              # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+              # Ansible collection ansible.netcommon and cisco.ios
+              ansible_network_os: "cisco.ios.ios"
+              # ansible_network_cli_ssh_type: libssh
+              # ansible_network_cli_ssh_type: paramiko
+              ansible_command_timeout: 300
+              ansible_connect_timeout: 300
+              ansible_user: "{{ net_user.username }}"
+              ansible_password: "{{ net_user.password }}"
+              ansible_become_password: "{{ net_user.enable_password }}"
+      ```
   tasks:
     - name: Set ansible_net_config
       block:

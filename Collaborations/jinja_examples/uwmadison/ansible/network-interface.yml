@@ -1,8 +1,5 @@
 ---
 - name: Interface Builder
-  # FIXME: how do we filter defaults so we don't build all interfaces on all hosts
-  # we will probalby need to have the user specify something to limit without needing
-  # them to lookup and enter the 
   hosts: device_roles_core:device_roles_node
   gather_facts: false
   connection: local
@@ -14,7 +11,15 @@
     netbox_token: "{{ lookup('env', 'NETBOX_TOKEN') }}"
     # netdevice_inventory: "{{ query('netbox.netbox.nb_lookup', 'devices', api_filter='status=active has_primary_ip=True', api_endpoint=netbox_api, token=netbox_token) }}"
     # netbox_vlans: "{{ query('netbox.netbox.nb_lookup', 'vlans', api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}"
-    # interfaces: "{{ query('netbox.netbox.nb_lookup', 'interfaces', api_filter='device=' + inventory_hostname, api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}" 
+    # interfaces: "{{ query('netbox.netbox.nb_lookup', 'interfaces', api_filter='device=' + inventory_hostname, api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}"
+    __doc__: |
+      EXPERIMENTAL Managed network Interface configuration
+
+
+      FIXME: how do we filter defaults so we don't build all interfaces on all hosts
+      we will probalby need to have the user specify something to limit without needing
+      them to lookup and enter the ... what?
+
   tasks:
     # - name: Debug Interfaces
     #   blockinfile:
@@ -45,12 +50,18 @@
     #     # FIXME: do we have a way to sanity check?
     #     # validate: "command to run with %s option"
     - name: Provision Interfaces
+      vars:
+        __doc__: |
+          Render `network/interfaces/*.j2` templates into `/var/local/tftp/ansible/interfaces/{{ inventory_hostname }}.conf`
+          for testing
+
+          FIXME: make tftp dir a variable that matches NetCMS config generation
+
+          FIXME: do we have a way to sanity check with `validate`?
       template:
-        backup: yes
-        # FIXME: make tftp dir a variable that matches NetCMS config generation
+        backup: true
         dest: "/var/local/tftp/ansible/interfaces/{{ inventory_hostname }}.conf"
         # newline_sequence: "\r\n"
         # output_encoding: "utf-8"
         src: "network/interfaces/{{ platforms[0].split('-')[0] }}.j2"
-        # FIXME: do we have a way to sanity check?
         # validate: "command to run with %s option"
