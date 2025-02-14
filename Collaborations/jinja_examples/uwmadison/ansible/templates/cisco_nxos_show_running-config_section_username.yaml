@@ -1,0 +1,12 @@
+- example: username emerg password 5 $1$salt$hashvaluehere  role network-admin
+  getval: '^username (?P<name>\w+)( (?P<nopassword>nopassword))?( (?P<password_type>secret|password) (?P<type>\d+) (?P<hashed_password>\S+))?(  (?P<has_role>role) (?P<role>.+))?$'
+  result:
+    nxos_users:
+      - name: "{{ name }}"
+        hashed_password:
+          type: "{{ type }}"
+          value: "{{ hashed_password }}"
+        has_role: "{{ has_role }}"
+        role: "{{ role }}"
+        password_type: "{{ password_type }}"
+        nopassword: "{{ nopassword }}"

@@ -1,0 +1,10 @@
+interface Port-channel<$PORT_CHANNEL>
+ description <$UPLINK_PORT_CHANNEL_DESC>
+ switchport trunk allowed vlan 2-899,1134-4093
+ logging event link-status
+ logging event trunk-status
+ logging event bundle-status
+ logging event spanning-tree
+ logging event status
+ logging event trunk-status
+ spanning-tree cost 20

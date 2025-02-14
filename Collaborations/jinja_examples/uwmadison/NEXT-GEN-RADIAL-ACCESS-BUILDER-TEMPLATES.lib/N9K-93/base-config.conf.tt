@@ -1,0 +1,301 @@
+!###########################################
+!#           L a s t  A u d i t            #
+!# none / 1999-01-01
+!#
+!# Version: [% INSERT "package_version.txt" %]
+!###########################################
+!#####  A C L   L I S T    B E L O W   #####
+!###########################################
+![% # FIXME: why are the ACLs listed before the main config %]
+[% USE Dumper(indent=0, pad="\n") %]
+[% FOREACH acl IN management_acl_ipv46 # tftp acl directory in INCLUDE path -%]
+[% SET acl = acl.remove('/var/local/tftp/cisco/acl/') # FIXME: remove path from array as we use INCLUDE_PATH not ABSULUTE -%]
+[% INSERT "$acl" FILTER replace('\nend', "\n!") # NB: regex sees one long string, not lines, so ^ and $ don't work -%]
+[% END -%]
+######################################################################
+##  N E X U S       9 0 0 0        A C C E S S         C O N F I G  ##
+######################################################################
+
+hostname [% form_inputs.hostname_short %]
+policy-map type network-qos jumbo
+  class type network-qos class-default
+    mtu 9216
+[%# NB: this is default generated config, not applied #
+vdc #form_inputs.hostname_short# id 1
+  limit-resource vlan minimum 16 maximum 4094
+  limit-resource vrf minimum 2 maximum 4096
+  limit-resource port-channel minimum 0 maximum 511
+  limit-resource u4route-mem minimum 248 maximum 248
+  limit-resource u6route-mem minimum 96 maximum 96
+  limit-resource m4route-mem minimum 58 maximum 58
+  limit-resource m6route-mem minimum 8 maximum 8
+
+-%]
+cfs eth distribute
+feature udld
+feature interface-vlan
+feature lacp
+[% # FIXME: should this instead check if we have a form_inputs.vpc number? -%]
+[% IF form_inputs.height == 2 # Nexus doesn't stack it does vPC -%]
+feature vpc
+[% END -%]
+feature lldp
+clock timezone CDT -6 0
+clock summer-time CDT 2 Sun Mar 02:00 1 Sun Nov 02:00 60
+
+no password strength-check
+username admin password 5 [% emerg_user.attributes.type5hash # built-in local admin same credential as emerg %]  role network-admin
+username emerg password 5 [% emerg_user.attributes.type5hash # FIXME: should be using type8 hash like IOS recommended by CISA and NSA %]  role network-admin
+username emerg passphrase  lifetime 99999 warntime 14 gracetime 3
+
+banner motd ~
+
+          You are connected to the [% form_inputs.hostname %] switch
+.
+              Unauthorized use or access is prohibited!
+
+*************************************************************************
+****   Division of Information Technology (DoIT) Network Services    ****
+****             University of Wisconsin - Madison                   ****
+****                                                                 ****
+****            To report problems, please call the                  ****
+****         Network Operations Center at 608-263-4188               ****
+****               or email noc@doit.wisc.edu.                       ****
+****                                                                 ****
+*************************************************************************
+
+~
+
+ip domain-lookup
+ip domain-name local.net.wisc.edu
+ip domain-list net.wisc.edu
+ip domain-list local.net.wisc.edu
+ip name-server [% config_context.dns_ipv4.join(" ") %]
+radius-server key 7 "[% radius_secret.attributes.nxostype7 %]"
+[% FOREACH radius_server IN config_context.radius_ipv4 -%]
+radius-server host [% radius_server %] authentication accounting [% #NB: preserve trailing space to match running-conf %]
+[% END -%]
+aaa group server radius RAD_SERVERS [% #NB: preserve trailing space to match running-conf %]
+[% FOREACH radius_server IN config_context.radius_ipv4 -%]
+    server [% radius_server %] [% #NB: preserve trailing space to match running-conf %]
+[% END -%]
+    use-vrf management
+system default switchport
+logging event trunk-status default
+[% # NB: this statement doesn't show up in the running config -%]
+logging event link-status default
+[% # NB: this statement doesn't show up in the running config -%]
+service unsupported-transceiver
+errdisable recovery interval 30
+errdisable recovery cause link-flap
+errdisable recovery cause udld
+errdisable recovery cause bpduguard
+errdisable recovery cause loopback
+errdisable recovery cause storm-control
+errdisable recovery cause security-violation
+errdisable recovery cause psecure-violation
+errdisable recovery cause vpc-peerlink
+errdisable recovery cause failed-port-state
+[% # NB: this is where the ACL list actually goes -%]
+system qos
+  service-policy type network-qos jumbo
+
+
+system vlan 1006 reserve
+
+copp profile strict
+snmp-server contact NOC @ 3-4188
+[% FOREACH snmptrap_host IN config_context.snmptrap_ipv4 -%]
+snmp-server host [% snmptrap_host %] traps version 1 [% snmptrap_secret.password %]
+[% END -%]
+rmon event 1 log trap public description FATAL(1) owner PMON@FATAL
+rmon event 2 log trap public description CRITICAL(2) owner PMON@CRITICAL
+rmon event 3 log trap public description ERROR(3) owner PMON@ERROR
+rmon event 4 log trap public description WARNING(4) owner PMON@WARNING
+rmon event 5 log trap public description INFORMATION(5) owner PMON@INFO
+snmp-server community [% snmp_secret.password %] group network-operator
+snmp-server community [% snmp_secret.password %] use-ipv4acl G-A-NexSnmpReadOnly
+[% FOREACH ntp_host IN config_context.ntp_ipv4 -%]
+ntp server [% ntp_host %] use-vrf management
+[% END -%]
+ntp peer [% form_inputs.keepalive2 %] use-vrf keepalive
+[% # FIXME: skip source-interface statement on radial/access devices with only one IP interface https://kb.wisc.edu/ns/internal/120626 -%]
+ntp source-interface mgmt0
+ntp logging
+ntp access-group peer G-A-NexNtpPeers
+ntp access-group serve G-A-NexBlockAll
+ntp access-group serve-only G-A-NexBlockAll
+ntp access-group query-only G-A-NexBlockAll
+aaa authentication login default group RAD_SERVERS 
+aaa accounting default group RAD_SERVERS [% #NB: preserve trailing space to match running-conf %]
+aaa authentication login error-enable 
+
+[% #FIXME: this command doesn't exist/parse, it's only on the kohl/kellner N7K "no ip igmp snooping optimise-multicast-flood" -%]
+vlan 1
+
+spanning-tree port type network default
+spanning-tree loopguard default
+[% # FIXME: do we need to enable MST?
+# spanning-tree mst configuration
+#   name UWregion1
+#   revision 10
+#   instance 1 vlan 2-899,1134-3899
+-%]
+udld aggressive
+vrf context keepalive
+vrf context management
+  ip domain-name local.net.wisc.edu
+  ip domain-list net.wisc.edu
+  ip domain-list local.net.wisc.edu
+  ip name-server [% config_context.dns_ipv4.join(" ") %]
+[% IF form_inputs.MGMT_DEFAULT_GATEWAY != '10.151.90.1' -%]
+  ip route 0.0.0.0/0 [% form_inputs.MGMT_DEFAULT_GATEWAY %]
+[% END -%]
+port-channel load-balance src-dst ip-l4port-vlan 
+[% SWITCH form_inputs.model_1 # NB: this statement only seems to apply to N9K-C9372 and like hardware -%]
+[% CASE ['N9K-C9332PQ', 'N9K-C9372PX', 'N9K-C9372PX-E', 'N9K-C9372TX'] -%]
+hardware qos ns-buffer-profile mesh
+[% END -%]
+[% IF form_inputs.height == 2 # Nexus doesn't stack it does vPC -%]
+vpc domain [% form_inputs.vPCnumber %]
+  peer-switch
+  role priority [% form_inputs.vpc_priority %]
+  system-priority 1
+  peer-keepalive destination [% form_inputs.keepalive2 %] source [% form_inputs.keepalive1 %] vrf keepalive
+  delay restore 150
+  auto-recovery
+  ipv6 nd synchronize
+  ip arp synchronize
+[% END -%]
+port-profile type port-channel PO_EDGE_STANDARDS
+  storm-control multicast level 10.00
+  switchport
+  spanning-tree bpduguard enable
+  spanning-tree guard root
+  spanning-tree port type edge trunk
+  storm-control action trap
+  storm-control broadcast level 1.00
+  state enabled
+port-profile type ethernet ETH_EDGE_STANDARDS
+  storm-control multicast level 10.00
+  switchport
+  spanning-tree bpduguard enable
+  spanning-tree guard root
+  spanning-tree port type edge trunk
+  storm-control action trap
+  storm-control broadcast level 1.00
+  state enabled
+
+
+interface Vlan1
+
+[% FOREACH interface IN po_interfaces.keys.nsort -%]
+[% SWITCH interface -%]
+[% CASE keepalive_po_interface -%]
+interface [% po_interfaces.$interface.name %]
+  description [% po_interfaces.$interface.description %]
+  no switchport
+  mtu 9216
+  vrf member keepalive
+  ip address [% form_inputs.keepalive1 %]/30
+  no shutdown
+
+[% CASE peerlink_po_interface -%]
+interface [% po_interfaces.$interface.name %]
+  description [% po_interfaces.$interface.description %]
+  switchport
+  switchport mode trunk
+  switchport trunk allowed vlan 2-899,1134-4093
+  spanning-tree port type network
+  vpc peer-link
+  no shutdown
+
+[% CASE uplink_po_interface -%]
+interface [% po_interfaces.$interface.name %]
+  description UPLINK to [% form_inputs.PRIMARY_UPLINK_DESC %]
+  switchport mode trunk
+  switchport trunk allowed vlan 2-899,1134-4093
+  spanning-tree cost [% po_interfaces.$interface.custom_fields.stp_cost %]
+  spanning-tree port type network
+  mtu 9216
+  vpc [% po_interfaces.$interface.name.replace("port-channel", "") %]
+
+[% END # SWITCH/CASE interface -%]
+[% END # FOREACH po_interfaces -%]
+
+[% FOREACH interface IN device_types.1.interfaces # Nexus doesn't stack so we just need the one entry for this device -%]
+[% IF loop.count == 1 %][% SET default_interface_type = interface.type.value %][% END # NB: cache type of Eth1/1 and make all same-type ports edgeconfable, stop when port types change in uplink module -%]
+[% SET name = interface.name -%]
+[% SWITCH interface.name -%]
+[% CASE 'mgmt0' -%]
+interface mgmt0
+  vrf member management
+  ip address [% form_inputs.MGMT_SWITCH_IP %]/[% form_inputs.MGMT_SUBNET_MASK_CIDR %]
+[% CASE keepalive_eth_interface -%]
+interface [% eth_interfaces.$name.name %]
+  description [% eth_interfaces.$name.description %]
+  no switchport
+  mtu 9216
+  channel-group [% eth_interfaces.$name.lag.name.replace("port-channel", "") %] mode active
+  no shutdown
+
+[% CASE peerlink_eth_interfaces -%]
+interface [% eth_interfaces.$name.name %]
+  description [% eth_interfaces.$name.description %]
+  switchport
+  switchport mode trunk
+  switchport trunk allowed vlan 2-899,1134-4093
+  spanning-tree port type network
+  channel-group [% eth_interfaces.$name.lag.name.replace("port-channel", "") %] mode active
+  no shutdown
+
+[% CASE uplink_eth_interfaces -%]
+interface [% eth_interfaces.$name.name %]
+  description [% eth_interfaces.$name.description %]
+  switchport
+  switchport mode trunk
+  switchport trunk allowed vlan 2-899,1134-4093
+  spanning-tree cost [% eth_interfaces.$name.custom_fields.stp_cost %]
+  spanning-tree port type network
+  mtu 9216
+[% #FIXME: having "force" on uplink may not be required anymore,
+   # might have applied to earlier N7K version.
+   # "force" doesn't appear in running/startup config -%]
+  channel-group [% eth_interfaces.$name.lag.name.replace("port-channel", "") %] force mode active
+  no shutdown
+
+[% CASE # Default EdgeConf port -%]
+interface [% name %]
+  shutdown
+[% IF device_info.role == 'access' and interface.type.value == default_interface_type # NB: don't make uplinks edgeconfable, stop on non-default (not matching Eth1/1 type) port types -%]
+  description :E(,,):M:
+  switchport
+  switchport mode access
+  spanning-tree port type edge trunk
+  spanning-tree bpduguard enable
+  spanning-tree guard root
+  storm-control broadcast level 1.00
+  storm-control multicast level 10.00
+  storm-control action trap
+[% END # EdgeConfable port FIXME: flag when port types change and stop all edgeconfableness in case uplink also contains same type as front-facing ports (eg octopus cable) -%]
+
+[% END # SWITCH/CASE interface -%]
+[% END # FOREACH netbox interfaces -%]
+cli alias name wri copy running-config startup-config
+cli alias name wr copy running-config startup-config
+line console
+  exec-timeout 120
+line vty
+  exec-timeout 120
+  access-class G-A-NexAdminAccess in
+  ipv6 access-class G-A-v6NexAdminAccess in
+boot nxos bootflash:/[% config_context.nxos_bin %] 
+[% # FIXME: skip source-interface statement on radial/access devices with only one IP interface https://kb.wisc.edu/ns/internal/120626 -%]
+ip radius source-interface mgmt0
+
+logging logfile logs 7
+[% FOREACH syslog_host IN config_context.syslog_ipv4 -%]
+logging server [% syslog_host %] 7 use-vrf management
+[% END -%]
+no logging console
+no logging rate-limit

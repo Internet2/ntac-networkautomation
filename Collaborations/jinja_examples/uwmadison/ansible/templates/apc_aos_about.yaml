@@ -1,0 +1,28 @@
+---
+- example: "Model Number:           AP9641"
+  getval: '^Model Number:\s+(?P<model>\w+)'
+  result:
+    ansible_net_model: "{{ model }}"
+
+- example: "Serial Number:          ZA2103009631"
+  getval: '^Serial Number:\s+(?P<serial>\w+)'
+  result:
+    ansible_net_serial: "{{ serial }}"
+
+- example: "MAC Address:            28 29 86 47 43 F4"
+  getval: '^MAC Address:\s+(?P<mac>\w\w \w\w \w\w \w\w \w\w \w\w)'
+  result:
+    ansible_net_macaddress: "{{ mac }}"
+
+- example: "Name:                   aos"
+  getval: '^Name:\s+(?P<software>\w+)'
+  result:
+    ansible_net_os:
+      "{{ software }}": null
+  shared: true
+
+- example: "Version:                v1.4.2.1"
+  getval: '^Version:\s+v(?P<version>[\w\.]+)'
+  result:
+    ansible_net_os:
+      "{{ software }}": "{{ version }}"

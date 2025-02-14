@@ -1,0 +1,229 @@
+---
+- name: Base Config Builder
+  # hosts: "u-*:ma-*"
+  hosts: u-cssc-b116-1-*
+  gather_facts: false
+  connection: local
+  vars:
+    netbox_devinfo: "{{ lookup('pipe','/usr/local/ns/bin/devinfo -j netbox-qa' ) | from_json }}"
+    netbox_api: "{{ netbox_devinfo.connection_method }}://{{ netbox_devinfo.attributes.host }}:{{ netbox_devinfo.attributes.port }}/"
+    netbox_token: "{{ netbox_devinfo.password }}"
+    platform_family: "{{ platforms[0].split('-')[0] }}"
+    device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+)', '\\1') | first }}"
+    snmp_community: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j snmp-' + inventory_hostname) | from_json }}"
+    radius_secret: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j radius-' + inventory_hostname) | from_json }}"
+    # interfaces: "{{ query('netbox.netbox.nb_lookup', 'interfaces', api_filter='device=' + inventory_hostname, api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}" 
+  tasks: 
+    - name: Debug
+      blockinfile:
+          path: "/var/local/tftp/ansible/{{ inventory_hostname }}.yaml"
+          create: True
+          block: |
+            {{ hostvars[inventory_hostname] | to_yaml }}
+    - name: Provision Base Config
+      template:
+        # backup: yes
+        dest: "/var/local/tftp/ansible/{{ inventory_hostname }}.conf"
+        src: "network/base/{{ platform_family }}-{{ device_family }}.j2"
+        newline_sequence: "\n"
+        # output_encoding: "utf-8"
+        # validate: "command with %s for hostname"
+    - name: Provision APC
+      when: "'apc' in manufacturers and device_family in ['ap964', 'ap963']"
+      vars:
+        security_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j security') | from_json }}"
+        apc_user:
+          username: "apc"
+          password: "apc"
+      block:
+        - name: Get Current AOS version (NMC3)
+          when: "device_family in ['ap964']"
+          ignore_errors: True
+          # failed_when: "'someerr' in result"
+          environment:
+            SSHPASS: "{{ security_user.password }}"
+          expect:
+            command: "sshpass -e ssh {{ security_user.username }}@{{ inventory_hostname }}"
+            responses:
+              'apc>':
+                - "about"
+                - "exit"
+          register: apc_aos_about
+        - name: Debug AOS about
+          debug: var=apc_aos_about
+
+        - name: Parse AOS version (NMC3)
+          when: "device_family in ['ap964']"
+          ansible.netcommon.cli_parse:
+            text: "{{ apc_aos_about.stdout }}"
+            parser:
+              name: ansible.netcommon.native
+              os: apc_aos
+              command: about
+            set_fact: apc_aos_facts
+        - name: Debug AOS get_facts
+          debug: var=apc_aos_facts
+
+        - name: Provision User CSR (NMC2 NMC3)
+          when: 
+          template:
+            dest: "/var/local/tftp/ansible/{{ inventory_hostname }}-users.csf"
+            src: "network/base/{{ platform_family }}-users.j2"
+        - name: Reset Config to Defaults (NMC2 NMC3)
+          ignore_errors: True
+          # register: result
+          # failed_when: "'someerr' in result"
+          environment:
+            SSHPASS: "{{ security_user.password }}"
+          expect:
+            command: "sshpass -e ssh {{ security_user.username }}@{{ inventory_hostname }}"
+            responses:
+              'apc>':
+                - "resetToDef -p keepip"
+                - "YES"
+                - "reboot"
+                - "YES"
+        - name: WAIT FOR APC TO RETURN
+          wait_for:
+            host: "{{inventory_hostname}}"
+            port: 22
+            delay: 60
+            timeout: 900
+          delegate_to: localhost
+        - name: Pull Default APC Config with SCP
+          when: "device_family in ['ap964', 'ap963']"
+          environment:
+            SSHPASS: "{{ security_user.password }}"
+          command:
+            argv:
+              - "sshpass"
+              - "-e"
+              - "scp"
+              - "{{ security_user.username }}@{{ inventory_hostname }}:config.ini"
+              - "/var/local/tftp/ansible/{{ inventory_hostname }}-orig.conf"
+        - name: Pull Default APC Config with FTP
+          when: "device_family in ['ap961']"
+          command:
+            argv:
+              - "/usr/bin/curl"
+              - "--silent"
+              - "--user"
+              - "{{ security_user.username }}:{{ security_user.password }}"
+              - "--url"
+              - "ftp://{{ inventory_hostname }}/config.ini"
+              - "--output"
+              - "/var/local/tftp/ansible/{{ inventory_hostname }}-orig.conf"
+
+        - name: Install AOS Firmware with SCP (NMS3)
+          when: "device_family in ['ap964'] and apc_aos_facts.ansible_net_os.aos is version(config_context[0].aos_version, 'ne')"
+          ignore_errors: True
+          environment:
+            SSHPASS: "{{ security_user.password }}"
+          command:
+            argv:
+              - "sshpass"
+              - "-e"
+              - "scp"
+              - "/var/local/tftp/APC/{{ device_family }}/{{ config_context[0].aos_bin }}"
+              - "{{ security_user.username }}@{{ inventory_hostname }}:"
+        - name: WAIT FOR APC TO RETURN
+          wait_for:
+            host: "{{inventory_hostname}}"
+            port: 22
+            delay: 60
+            timeout: 900
+          delegate_to: localhost
+        - name: Get Current AOS version (NMC3)
+          when: "device_family in ['ap964']"
+          ignore_errors: True
+          # failed_when: "'someerr' in result"
+          environment:
+            SSHPASS: "{{ security_user.password }}"
+          expect:
+            command: "sshpass -e ssh {{ security_user.username }}@{{ inventory_hostname }}"
+            responses:
+              'apc>':
+                - "about"
+                - "exit"
+          register: apc_aos_about
+        - name: Debug AOS about
+          debug: var=apc_aos_about
+
+        - name: Parse AOS version (NMC3)
+          when: "device_family in ['ap964']"
+          ansible.netcommon.cli_parse:
+            text: "{{ apc_aos_about.stdout }}"
+            parser:
+              name: ansible.netcommon.native
+              os: apc_aos
+              command: about
+            set_fact: apc_aos_facts
+        - name: Debug AOS get_facts
+          debug: var=apc_aos_facts
+        - name: ASSERT THAT THE AOS VERSION IS CORRECT
+          assert:
+            that:
+              - "apc_aos_facts.ansible_net_os.aos is version(config_context[0].aos_version, 'eq')"
+            msg: "AOS version does not match compliant version. Upgrade unsuccessful."
+
+        - name: Load AOS config.ini with SCP (NMC3)
+          when: "device_family in ['ap964']"
+          ignore_errors: True
+          environment:
+            SSHPASS: "{{ security_user.password }}"
+          command:
+            argv:
+              - "sshpass"
+              - "-e"
+              - "scp"
+              - "/var/local/tftp/ansible/{{ inventory_hostname }}.conf"
+              - "{{ security_user.username }}@{{ inventory_hostname }}:config.ini"
+        # - name: Push APC Config with FTP
+        #   command:
+        #     argv:
+        #       - "/usr/bin/curl"
+        #       - "--silent"
+        #       - "--user"
+        #       - "{{ security_user.username }}:{{ security_user.password }}"
+        #       - "--upload-file"
+        #       - "/var/local/tftp/ansible/{{ inventory_hostname }}.conf"
+        #       - "--url"
+        #       - "ftp://{{ inventory_hostname }}/config.ini"
+        - name: WAIT FOR APC TO RETURN
+          wait_for:
+            host: "{{inventory_hostname}}"
+            port: 22
+            delay: 60
+            timeout: 900
+          delegate_to: localhost
+        # TODO: check in final config to NetCMS
+        
+        # NB: we are skipping SSL cert signing and just using the built-in self-signed cert until we have a way
+        #     to automate provisoining, LetsEncrypt won't work as long as local.net.wisc.edu is not accessible off-campus
+        #     and getting individual CSRs signed by InCommon, along with yearly renewals, is too labor intensive for the value
+        # - name: Check for SSL CSR
+        #   stat:
+        #     path: /var/local/tftp/ansible/certificates/{{ inventory_hostname }}.csr
+        #   register: aos_csr
+        # - name: Check for SSL Cert
+        #   stat:
+        #     path: /var/local/tftp/ansible/certificates/{{ inventory_hostname }}.crt
+        #   register: aos_cert
+
+        # - name: Get SSL CSR (NMC3)
+        #   when: "device_family in ['ap964'] and aos_csr.stat is defined"
+        #   ignore_errors: True
+        #   # failed_when: "'someerr' in result"
+        #   environment:
+        #     SSHPASS: "{{ security_user.password }}"
+        #   expect:
+        #     command: "sshpass -e ssh {{ security_user.username }}@{{ inventory_hostname }}"
+        #     responses:
+        #       'apc>':
+        #         - "ssl csr -CN {{ inventory_hostname }} -O \"University of Wisconsin-Madison\" -C US -O OCIS"
+        #         - "exit"
+        # TODO: Fetch CSR /ssl/nmc.csr
+        # Submit CSR for signing (right now servercertificates.wisc.edu to submit and email to receive)
+        # Put signed cert in right filename, rerun playbook
+        # Put Cert in /ssl/cert.crt (or /ssl/nmc.crt)
+        # Interactively Expect "ssl cert -i /ssl/cert.crt"

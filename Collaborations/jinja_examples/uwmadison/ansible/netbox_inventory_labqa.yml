@@ -1,0 +1,32 @@
+---
+plugin: netbox.netbox.nb_inventory
+#uncomment api_endpoint and token for vagrant
+#api_endpoint: http://netbox
+#token: 0123456789abcdef0123456789abcdef01234567
+validate_certs: False
+config_context: False
+interfaces: False
+# Incident 6562406
+timeout: 300
+# fetch_all: no
+# max_uri_length: 1000
+group_by:
+  - sites
+  - device_roles
+  - device_types
+  - tags
+  - platforms
+keyed_groups:
+  - prefix: vlan_area
+    key: custom_fields.vlan_area.slug
+compose:
+  netbox_id: id
+query_filters:
+  - has_primary_ip: True
+  - status: "active"
+  - status: "staged"
+  - name__nic: "labprod"
+  - name__ic: "-b217-"
+  - name__ic: ".lab.net.wisc.edu"
+  - name__ic: ".local.lab.net.wisc.edu"
+  - name__ic: "-lab.doit.wisc.edu"

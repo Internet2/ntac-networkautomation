@@ -1,0 +1,190 @@
+---
+- name: OpenNMS Network Device Provisioning
+  hosts: vlan_area_lab:qa:wa-*
+  become: false
+  gather_facts: false
+  connection: local
+#  serial:
+#    - 5
+#    - 50
+#    - 100
+#    - 500
+  tags:
+    # - opennms
+    - opennms_config
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    # eligible_devices: "{{ groups['vlan_area_lab'] + groups['qa'] }}"
+    netbox_devinfo: "{{ lookup('pipe','/usr/local/ns/bin/devinfo -j netbox-prod') | from_json }}"
+    netbox_graphql: "{{ netbox_devinfo.connection_method + '://' + netbox_devinfo.attributes.host + ':' + netbox_devinfo.attributes.port + '/graphql/' }}"
+
+    opennms_devinfo: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j opennms-qa') | from_json }}"
+    opennms_api: "{{ opennms_devinfo.connection_method + '://' + opennms_devinfo.attributes.host + ':' + opennms_devinfo.attributes.port + '/opennms/rest' }}"
+    # opennms_requisitions_dict: {}
+    platform_family: "{{ platforms[0].split('-')[0] if platforms is defined else 'UNKN' }}"
+    device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+|n\\dk|n\\d\\d|securesync|sdx|pa|m-\\d+|cordex-cxc|aruba|ap-\\d|poweredge|avocent|equallogic|asr-\\d+|mx\\d+|ex\\d+|srx\\d+|VM)', '\\1') | first if device_types is defined else 'VM' }}"
+    device_type: "{{inventory_hostname.split('-')[0]}}"
+    device_ha: "{{ inventory_hostname.split('-')[5] | default('') }}"
+    requisition: "{{ opennms_requisitions[ device_type ] if opennms_requisitions[ device_type ] is defined else 'Servers' }}"
+    foreign_id: "{{ 'VM-{}'.format(netbox_id) if is_virtual else 'Device-{}'.format(netbox_id) | default(None) }}"
+  tasks:
+    # NB: Run once for all hosts in play
+    # https://www.reddit.com/r/ansible/comments/t62fia/group_vars_with_a_lookup_does_that_lookup_happen/
+    # https://docs.ansible.com/ansible/latest/playbook_guide/playbooks_delegation.html#id5
+    - name: Get Physical Addresses from Netbox
+      delegate_to: localhost
+      delegate_facts: True
+      run_once: True
+      set_fact:
+        netbox_physical_address: "{{  query('netbox.netbox.nb_lookup', 'sites', api_filter='status=active status=staging') | map(attribute='value') | list | items2dict(key_name='slug', value_name='physical_address') }}"
+    # - name: debug hostvars1
+    #   run_once: True
+    #   debug:
+    #     var: hostvars['localhost']
+
+    - name: Get Netbox IPs from GraphQL for Multi-IP Devices
+      when: "requisition in ['Routers', 'Servers', 'WirelessController', 'Firewalls', 'LoadBalancer']"
+      # NB: number of uWSGI workers on Netbox app server
+      include_tasks: netbox-multiip-tasks.yml
+#    - name: debug OpenNMS Requisition Interface and Service stanza
+#      set_fact:
+#        opennms_interfaces: "{{ lookup('template', 'opennms/opennms_interfaces.yaml.j2') }}"
+#    - name: debug interface yaml
+#      debug:
+#        var: opennms_interfaces.lines
+
+    # - name: debug sites
+    #   debug:
+    #     var: netbox_sites
+    # - name: Get Node Inventory
+    #   uri:
+    #     url: "{{ opennms_api }}/nodes"
+    #     headers:
+    #       Accept: "application/json"
+    #     url_username: "{{ opennms_devinfo.username }}"
+    #     url_password: "{{ opennms_devinfo.password }}"
+    #   register: node_inventory
+    # - name: debug node
+    #   debug:
+    #     var: node_inventory.json
+    # - name: Get Requisitions
+    #   uri:
+    #     # FIXME: we should rename this requisition to better match the breadth
+    #     #        of device types/roles its used with
+    #     url: "{{ opennms_api }}/requisitions/ios_access_switches"
+    #     headers:
+    #       Accept: "application/json"
+    #     url_username: "{{ opennms_devinfo.username }}"
+    #     url_password: "{{ opennms_devinfo.password }}"
+    #   register: requisitions
+    # - name: debug requisitions
+    #   debug:
+    #     var: requisitions.json
+    # - name: map devices to dict
+    #   set_fact:
+    #     opennms_requisitions_dict: "{{ opennms_requisitions_dict | default({}) | combine({item['foreign-id']: item}) }}"
+    #   loop: "{{ requisitions.json['node'] }}"
+    # - name: debug requisitions dict
+    #   debug:
+    #     var: opennms_requisitions_dict
+    # - name: debug eligible devices
+    #   debug:
+    #     var: eligible_devices
+    # NB: can't just use ID numbers because Device and VM each have their own record number space
+    # - name: create OpenNMS Requisition Foreign ID
+    #   # Skip records in hosts.yml not matching Netbox inventory
+    #   when: "netbox_id is defined"
+    #   set_fact:
+    #     foreign_id: "{{ 'VM-{}'.format(netbox_id) if is_virtual else 'Device-{}'.format(netbox_id) }}"
+    # - name: debug catagories
+    #   when: "foreign_id is defined"
+    #   debug:
+    #     msg: "{{ foreign_id }} {{ inventory_hostname }} requisition {{ requisition }} device_family {{ device_family }} platform_family {{ platform_family }}"
+    - name: Create Node records in OpenNMS Requisition API
+      # Skip records which don't have Netbox inventory
+      when: "netbox_id is defined and foreign_id is defined"
+      delegate_to: localhost
+      uri:
+        method: POST
+        url: "{{ opennms_api }}/requisitions/{{ requisition }}/nodes"
+        headers:
+          Accept: "application/json"
+        # NB: requisitions responds with 202 Accepted when adding new nodes
+        status_code:
+          - 200
+          - 201
+          - 202
+        # Don't require two requests for each request (401 then 202)
+        force_basic_auth: True
+        url_username: "{{ opennms_devinfo.username }}"
+        url_password: "{{ opennms_devinfo.password }}"
+        body_format: json
+        body:
+          # NB: can't just use ID numbers because Device and VM each have their own records
+          foreign-id: "{{ foreign_id }}"
+          node-label: "{{ inventory_hostname }}"
+          interface: "{{ lookup('template', 'opennms/opennms_interfaces.yaml.j2') | from_yaml  }}"
+          # FIXME: For firewalls where IP autodetection doesn't work, add list of IPs for all interfaces on primary and standalone devices.
+          #        with ICMP service monitoring eg..
+          # {
+          #   "monitored-service": [
+          #     {
+          #       "category": [],
+          #       "meta-data": [],
+          #       "service-name": "ICMP"
+          #     }
+          #   ],
+          #   "category": [],
+          #   "meta-data": [],
+          #   "descr": "ae5.1561",
+          #   "ip-addr": "10.151.129.160",
+          #   "managed": null,
+          #   "status": 1,
+          #   "snmp-primary": "N"
+          # },
+          # city: "{{ hostvars['localhost'].netbox_physical_address[sites[0]].split(',')[1] }}"
+          building: "{{ sites[0] }}"
+          #asset:
+          #  - name: city
+          #    value: "{{ hostvars['localhost'].netbox_physical_address[sites[0]].split(',')[1] }}"
+          #  - name: state
+          #    value: "{{ hostvars['localhost'].netbox_physical_address[sites[0]].split(',')[2].split(' ')[1] }}"
+          #  - name: zip
+          #    value: "{{ hostvars['localhost'].netbox_physical_address[sites[0]].split(',')[2].split(' ')[2] }}"
+          #  - name: address1
+          #    value: "{{ hostvars['localhost'].netbox_physical_address[sites[0]].split(',')[0] }}"
+          category:
+            "{{ [requisition, 'device_family_' + device_family, 'platform_family_' + platform_family] + group_names }}"
+            # - "{{ requisition }}"
+            # - "{{ 'device_family_' + device_family }}"
+            # - "{{ 'platform_family_' + platform_family }}"
+            # - "{{ group_names }}"
+      register: new_requisitions
+
+    # - name: debug new requisitions
+    #   debug:
+    #     var: new_requisitions
+
+    - name: Synchronize OpenNMS Requisition making changes active
+      run_once: True
+      delegate_to: localhost
+      with_items: "{{ opennms_requisitions.values() | unique | list }}"
+      uri:
+        method: PUT
+        url: "{{ opennms_api }}/requisitions/{{ item }}/import?rescanExisting=false"
+        headers:
+          Accept: "application/json"
+        # NB: requisitions responds with 202 Accepted when adding new nodes
+        status_code:
+          - 200
+          - 201
+          - 202
+        # Don't require two requests for each request (401 then 202)
+        force_basic_auth: True
+        url_username: "{{ opennms_devinfo.username }}"
+        url_password: "{{ opennms_devinfo.password }}"
+      register: sync_requisitions
+
+    # - name: debug sync requisitions
+    #   debug:
+    #     var: sync_requisitions

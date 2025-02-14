@@ -1,0 +1,154 @@
+<pre>
+
+######################################################################
+######    N E X U S          9 0 0 0           P R O C E S S    ######
+######################################################################
+
+NOTE:
+-----------------------------------------------------------------------------
+  NXOS = non-disruptive with dual SUPs in chassis
+  EPLD = disruptive (upgrading a module at a time can cutdown downtime, but slow)
+
+
+
+
+
+Check the above Parameters, If correct bring the box up on the Sandbox vlan"
+-----------------------------------------------------------------------------
+Abort Auto Provisioning and continue with normal setup ?(yes/no)[n]:y
+...wait...
+Do you want to enforce secure password standard (yes/no) [y]: n
+  Enter the password for "admin": (use emerg password)
+Would you like to enter the basic configuration dialog (yes/no): n
+
+
+
+
+Login using admin...
+-----------------------------------------------------------------------------
+term width 175
+configure terminal
+hostname [% form_inputs.hostname_short %]
+int mgmt0
+ ip address [% form_inputs.sandbox_IP_1 %]/15
+ no shutdown
+ exit
+vrf context management
+  ip route 0.0.0.0/0 mgmt0 [% tftpserver %]
+system vlan 1006 reserve
+y
+end
+
+
+
+
+
+
+Save the output from the following commands for later:
+-----------------------------------------------------------------------------
+show ver               
+show ver module # epld 
+
+
+
+
+
+
+
+
+Upgrading to [% config_context.nxos_bin %]
+Upgrading EPLD image to [% config_context.nxos_epld_bin %]
+-----------------------------------------------------------------------------
+ping [% tftpserver %] vrf management
+copy http://[% tftpserver %]/tftp/cisco/[% config_context.nxos_bin %] bootflash: vrf management
+copy http://[% tftpserver %]/tftp/cisco/[% config_context.nxos_epld_bin %] bootflash: vrf management
+
+[% # FIXME: isn't this step unnecessary if you use "install all nxos" then reboot? %]
+configure t
+boot nxos bootflash:[% config_context.nxos_bin %]
+end
+!
+copy running-config startup-config                                  #== This will set the boot variable within PROM
+reload    (If Standby SUPs are present, wait for the auto copy to finish.)
+
+
+#== Note: Make sure all modules are up/active before doing the next step, otherwise it won't get upgraded.
+show module
+install all nxos bootflash:[% config_context.nxos_bin %]                   #== BIOS &amp; NXOS update
+... 
+Do you want to continue with the installation (y/n)? y
+...
+
+
+#== Note: Make sure all modules are up/active before doing the next step, otherwise it won't get upgraded.
+show module
+install epld bootflash:[% config_context.nxos_epld_bin %] module all         #== Upgrading EPLD, Will reboot automatically if upgrade needed
+...
+Do you want to continue (y/n) ?  y
+...
+
+
+#== Note: Make sure all modules are up/active before doing the next step, otherwise it won't get upgraded.
+show module
+install epld bootflash:[% config_context.nxos_epld_bin %] module all golden  #== Upgrading golden EPLD, Will reboot automatically
+...
+Do you want to continue (y/n) ?  y
+...
+
+
+
+
+
+
+#== Confirm upgrades occurred, comparing from intial "show" commands:
+-----------------------------------------------------------------------------
+show ver               
+show ver module # epld   (IE: #=1,2,3,...)
+
+
+
+
+
+
+
+#== TFTP configuration to switch
+-----------------------------------------------------------------------------
+copy http://[% tftpserver %]/tftp/cisco/base/[% form_inputs.hostname %].conf bootflash: vrf management
+copy bootflash:[% form_inputs.hostname %].conf startup-config
+reload
+
+
+
+
+
+
+
+#== Verify System Vlans  (Wait for command prompt: [% form_inputs.hostname # hostname_short %]#)
+-----------------------------------------------------------------------------
+ sho system vlan reserved
+
+system current running vlan reservation: 1006-1133
+
+
+
+
+
+
+
+#== Verify that the Jumbo MTU setting is correct by issuing command:
+-----------------------------------------------------------------------------
+ show policy-map system type network-qos
+ show int e1/54 | inc MTU 
+
+The System Jumbo MTU size should be 9216 bytes
+
+
+
+#== CMS Checkins: 
+-----------------------------------------------------------------------------
+ssh netcms1:
+make -j 2 logmsg="Configured downlink ports for [% form_inputs.hostname %]" [% form_inputs.RADIAL_SWITCH_NAME %].update [% form_inputs.RADIAL_SWITCH_NAME2 %].update
+make new
+[% form_inputs.hostname %]
+
+</pre>

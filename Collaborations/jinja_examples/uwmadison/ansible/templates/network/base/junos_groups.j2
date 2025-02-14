@@ -1,0 +1,7 @@
+groups {
+{% for config in junos_groups %}
+    replace: {{ config }} {
+        {{ lookup('file', junos_groups_dir + '/' + config) }}
+    }
+{% endfor %}
+}

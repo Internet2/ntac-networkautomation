@@ -1,0 +1,2162 @@
+; #     #                   ###
+; #     #  ######   #   #   ###
+; #     #  #         # #    ###
+; #######  #####      #      #
+; #     #  #          #
+; #     #  #          #     ###
+; #     #  ######     #     ###
+; #
+; #
+; # This file is versioned with git and pushed out by Ansible.
+; # 
+; # To edit this file on netcms1:
+; # 
+; # netcms1:/home/net/ns-ansible-uwmadison/ansible/templates/network/base/aos.j2
+
+; # Verify the deployed changes are what you expect (--check)
+; #  /home/net/ns-ansible-uwmadison/ansible/netbox-playbook.sh /home/net/ns-ansible-uwmadison/ansible/network-base.yml --limit "<hostname>" --check
+; # Acutally deploy the changes
+; # /home/net/ns-ansible-uwmadison/ansible/netbox-playbook.sh /home/net/ns-ansible-uwmadison/ansible/network-base.yml --limit "<hostname>"
+; #
+; # To add new files to be pushed edit the netmgmt.yml playbook
+; # https://git.doit.wisc.edu:NS/ns-ansible-uwmadison/ansible/
+; 
+
+[NetworkTCP/IP]
+{# NB: if Override is set to the MAC address then the IP settings will be set by config
+   otherwise the IP is not changed from what is currently set on the device #}
+{# ; Override=mac_address #}
+SystemIP={{ primary_ip4 }}
+SubnetMask={{ query('netbox.netbox.nb_lookup', 'ip-addresses', api_filter='address=' + primary_ip4, api_endpoint=netbox_api, token=netbox_token) | map(attribute='value.address') | first | ansible.netcommon.ipaddr('netmask') }}
+DefaultGateway={{ query('netbox.netbox.nb_lookup', 'ip-addresses', api_filter='address=' + primary_ip4, api_endpoint=netbox_api, token=netbox_token) | map(attribute='value.address') | first | ansible.netcommon.nthhost(1) }}
+IPv4=enabled
+BootMode=Manual
+HostName={{ inventory_hostname.split('.')[0] }}
+DomainName=local.net.wisc.edu
+PortSpeed=Auto
+DHCPBootpVendorClass=APC
+DHCPBootpClientID=MAC
+DHCPBootpUserClass=SU
+DHCPRequireCookie=disabled
+PingResponse=enabled
+IPv6=disabled
+IPv6DefaultGateway=::
+IPv6IP=::/64
+IPv6Manual=disabled
+IPv6AutoConfig=enabled
+DHCPv6Mode=Router Controlled
+
+[NetworkDNS]
+PrimaryDNSServerIP=144.92.254.254
+SecondaryDNSServerIP=128.104.254.254
+DNSReverseLookup=enabled
+DNSManualOverride=enabled
+
+[NetworkFTPServer]
+Port=21
+Access=enabled
+
+[NetworkTelnet]
+Port=23
+Telnet=disabled
+SSHPort=22
+SSH=enabled
+
+[NetworkSNMP]
+;    To change the User Profile Auth Phrase, or the 
+;    User Profile Encrypt Phrase, use the UserProfile#AuthPhrase, or
+;    UserProfile#EncryptPhrase keywords respectively where # is 
+;    the number of the profile. i.e., UserProfile1EncryptPhrase=apc crypt passphrase
+Access=enabled
+AccessControl1Community={{ snmp_community.password }}
+AccessControl2Community={{ snmp_community.enable_password }}
+AccessControl3Community=public2
+AccessControl4Community=private2
+AccessControl1NMS=0.0.0.0
+AccessControl2NMS=0.0.0.0
+AccessControl3NMS=0.0.0.0
+AccessControl4NMS=0.0.0.0
+AccessControl1AccessType=Read
+AccessControl2AccessType=Write
+AccessControl3AccessType=Disabled
+AccessControl4AccessType=Disabled
+AccessSnmpIII=disabled
+AccessControlSnmpIII1Enabled=disabled
+AccessControlSnmpIII2Enabled=disabled
+AccessControlSnmpIII3Enabled=disabled
+AccessControlSnmpIII4Enabled=disabled
+AccessControlSnmpIII1Mapping=0
+AccessControlSnmpIII2Mapping=1
+AccessControlSnmpIII3Mapping=2
+AccessControlSnmpIII4Mapping=3
+AccessControlSnmpIII1Address=0.0.0.0
+AccessControlSnmpIII2Address=0.0.0.0
+AccessControlSnmpIII3Address=0.0.0.0
+AccessControlSnmpIII4Address=0.0.0.0
+UserProfile1Name=apc snmp profile1
+UserProfile2Name=apc snmp profile2
+UserProfile3Name=apc snmp profile3
+UserProfile4Name=apc snmp profile4
+UserProfile1AccessType=noAuthNoPriv
+UserProfile2AccessType=noAuthNoPriv
+UserProfile3AccessType=noAuthNoPriv
+UserProfile4AccessType=noAuthNoPriv
+UserProfile1AuthProtocol=none
+UserProfile2AuthProtocol=none
+UserProfile3AuthProtocol=none
+UserProfile4AuthProtocol=none
+UserProfile1EncryptProtocol=none
+UserProfile2EncryptProtocol=none
+UserProfile3EncryptProtocol=none
+UserProfile4EncryptProtocol=none
+TrapReceiver1Community=public
+TrapReceiver2Community=public
+TrapReceiver3Community=public
+TrapReceiver4Community=public
+TrapReceiver5Community=public
+TrapReceiver6Community=public
+TrapReceiver1NMS=146.151.144.18
+TrapReceiver2NMS=0.0.0.0
+TrapReceiver3NMS=0.0.0.0
+TrapReceiver4NMS=0.0.0.0
+TrapReceiver5NMS=0.0.0.0
+TrapReceiver6NMS=0.0.0.0
+TrapReceiver1Enabled=enabled
+TrapReceiver2Enabled=enabled
+TrapReceiver3Enabled=enabled
+TrapReceiver4Enabled=enabled
+TrapReceiver5Enabled=enabled
+TrapReceiver6Enabled=enabled
+TrapReceiver1Language=enUs
+TrapReceiver2Language=enUs
+TrapReceiver3Language=enUs
+TrapReceiver4Language=enUs
+TrapReceiver5Language=enUs
+TrapReceiver6Language=enUs
+TrapReceiver1AuthTrap=enabled
+TrapReceiver2AuthTrap=enabled
+TrapReceiver3AuthTrap=enabled
+TrapReceiver4AuthTrap=enabled
+TrapReceiver5AuthTrap=enabled
+TrapReceiver6AuthTrap=enabled
+TrapReceiver1TrapType=SNMPv1
+TrapReceiver2TrapType=SNMPv1
+TrapReceiver3TrapType=SNMPv1
+TrapReceiver4TrapType=SNMPv1
+TrapReceiver5TrapType=SNMPv1
+TrapReceiver6TrapType=SNMPv1
+TrapReceiver1Mapping=0
+TrapReceiver2Mapping=0
+TrapReceiver3Mapping=0
+TrapReceiver4Mapping=0
+TrapReceiver5Mapping=0
+TrapReceiver6Mapping=0
+
+[NetworkEMAIL]
+;    To change an E-mail Recipient's Password use the
+;    EmailReceiver#Password keyword where # is the number of the
+;    recipient. i.e., EmailReceiver1Password=password
+;    To make a Recipient use the common Server settings, use
+;    EmailReceiver#UseCommon=enabled
+EmailFromName=address@example.com
+EmailServerName=mail.example.com
+EmailServerPort=25
+EmailServerAuth=disabled
+EmailServerUsername=User
+EmailServerSSLMode=none
+EmailServerCertRequired=disabled
+EmailServerCertFilename=""
+EmailReceiver1Enable=disabled
+EmailReceiver2Enable=disabled
+EmailReceiver3Enable=disabled
+EmailReceiver4Enable=disabled
+EmailReceiver1Address=address@example.com
+EmailReceiver2Address=address@example.com
+EmailReceiver3Address=address@example.com
+EmailReceiver4Address=address@example.com
+EmailReceiver1Format=Long
+EmailReceiver2Format=Long
+EmailReceiver3Format=Long
+EmailReceiver4Format=Long
+EmailReceiver1Language=enUs
+EmailReceiver2Language=enUs
+EmailReceiver3Language=enUs
+EmailReceiver4Language=enUs
+EmailReceiver1Route=Local
+EmailReceiver2Route=Local
+EmailReceiver3Route=Local
+EmailReceiver4Route=Local
+EmailReceiver1FromName=address@example.com
+EmailReceiver2FromName=address@example.com
+EmailReceiver3FromName=address@example.com
+EmailReceiver4FromName=address@example.com
+EmailReceiver1ServerName=mail.example.com
+EmailReceiver2ServerName=mail.example.com
+EmailReceiver3ServerName=mail.example.com
+EmailReceiver4ServerName=mail.example.com
+EmailReceiver1Port=25
+EmailReceiver2Port=25
+EmailReceiver3Port=25
+EmailReceiver4Port=25
+EmailReceiver1Auth=disabled
+EmailReceiver2Auth=disabled
+EmailReceiver3Auth=disabled
+EmailReceiver4Auth=disabled
+EmailReceiver1Username=User
+EmailReceiver2Username=User
+EmailReceiver3Username=User
+EmailReceiver4Username=User
+EmailReceiver1SSLMode=none
+EmailReceiver2SSLMode=none
+EmailReceiver3SSLMode=none
+EmailReceiver4SSLMode=none
+EmailReceiver1CertRequired=disabled
+EmailReceiver2CertRequired=disabled
+EmailReceiver3CertRequired=disabled
+EmailReceiver4CertRequired=disabled
+EmailReceiver1CertFilename=""
+EmailReceiver2CertFilename=""
+EmailReceiver3CertFilename=""
+EmailReceiver4CertFilename=""
+
+[NetworkSYSLOG]
+Syslog=enabled
+Facility=User
+Server1={{ config_context[0].syslog_doit_ns_ipv4[0] }}
+Server2={{ config_context[0].syslog_doit_ns_ipv4[1] }}
+Server3=0.0.0.0
+Server4=0.0.0.0
+Port1=514
+Port2=514
+Port3=514
+Port4=514
+Protocol1=0
+Protocol2=0
+Protocol3=0
+Protocol4=0
+Language1=enUs
+Language2=enUs
+Language3=enUs
+Language4=enUs
+SyslogMapCritical=Info
+SyslogMapWarning=Warning
+SyslogMapInformational=Info
+
+[NetworkWeb]
+Port=80
+HTTP=disabled
+HTTPSPort=443
+HTTPS=enabled
+MinimumProtocol=TLS1.2
+LimitedStatusAccess=disabled
+LimitedStatusDefaultPage=disabled
+
+[NetworkWiFi]
+;    To change the Wi-Fi Password, use the WiFiPassword keyword.
+;    i.e., WiFiPassword=password
+;    To change the Wi-Fi Enterprise Password, use the EnterprisePassword keyword.
+;    i.e., EnterprisePassword=password
+;    Note: Enabling the Wi-Fi interface will disable the wired interface.
+;          Disabling the Wi-Fi interface will enable the wired interface.
+WiFi=disabled
+NetworkNameSSID=""
+SecurityType=WPA2-Mixed
+EnterpriseUsername=""
+OuterIdentity=""
+
+[NetworkBACnet]
+;    The order of entries for the BACnet section has been changed,
+;    with the DCC password having being moved to the top.
+;    The reason for this change is because the DCC password must
+;    first be changed before BACnet can be enabled.
+DeviceCommCtrl=""
+Access=disabled
+DeviceID=0
+NetworkProtocol=BACnet/IP
+APDUTimeout=6000
+APDURetries=3
+BIPFDREnable=disabled
+BIPLocalPort=47808
+BIPRemoteDevice=0.0.0.0
+BIPRemotePort=47808
+BIPFDRTTL=7200
+MSTPMAC=0
+MSTPMaxMaster=127
+MSTPMaxInfoFrames=1
+BACNetName=BACn864743F4
+
+[SystemID]
+Name={{ inventory_hostname.split('.')[0] | replace('-', '_') }}
+Contact=Network Operations 263_4188
+Location={{ sites[0] }}
+Message=""
+
+[SystemUserManager]
+DefaultUserBadLoginAttempts=0
+DefaultUserType=Administrator
+DefaultUserDescription=User Description
+DefaultUserAccess=disabled
+DefaultUserSessionTimeout=3
+DefaultUserEventLogColorCoding=enabled
+DefaultUserExportLogFormat=Tab
+DefaultUserTemperatureScale=Fahrenheit
+
+[SystemRADIUS]
+;    To change the RADIUS Server's Primary or Secondary Secret
+;    use the PrimaryServerSecret or SecondaryServerSecret keyword.
+;    i.e., PrimaryServerSecret=password or SecondaryServerSecret=password
+Access=RADIUS, then Local
+PrimaryServer={{ config_context[0].radius_doit_ns[0].ipv4 }}
+PrimaryServerPort=1812
+PrimaryServerTimeout=1
+PrimaryServerSecret={{ radius_secret.password }}
+SecondaryServer={{ config_context[0].radius_doit_ns[1].ipv4 }}
+SecondaryServerPort=1812
+SecondaryServerTimeout=1
+SecondaryServerSecret={{ radius_secret.password }}
+DNSUpdateInterval=10
+
+[SystemFirewall]
+FileName=example.fwl
+Access=disabled
+
+[NetworkEAPoL]
+;    To change the Eapol passphrase or key, use the EapolPassphrase keyword.
+;    i.e., EapolPassphrase=passphrase/key
+Eapol=disabled
+
+[SecureInterface]
+;   APC Secure Interface (ASI): 
+;   To add an ASI trap recipient, list the IP address in the following form:
+;   <ip address>:<port>, <subscriber type>
+;   CurrentASISubscriber=192.168.0.1
+;   To remove an ASI trap recipient, list the IP or DNS name using the keyword:
+;   RemoveASISubscriber=192.168.0.2
+;   To remove all ASI trap recipients, use the keyword, value pair:
+;   RemoveALLASISubscribers=yes
+;   To change the Authentication Phrase, or the Encryption Phrase, 
+;   use the AuthenticationPhrase, EncryptionPhrase keywords respectively. 
+;   i.e., AuthenticationPhrase=ASI auth phrase
+Access=disabled
+AuthenticationProtocol=MD5
+TrapPort=9952
+
+[SystemDate/Time]
+;    The current date and time can be configured via the INI file 
+;    using the keywords CurrentDate and CurrentTime. The format of 
+;    CurrentDate is MM/DD/YYYY and the format of CurrentTime is HH:MM:SS 
+;    represented in 24 hour time.
+DSTConfiguration=Traditional US
+NTPEnable=enabled
+NTPPrimaryServer={{ config_context[0].ntp_ipv4[0] }}
+NTPSecondaryServer={{ config_context[0].ntp_ipv4[1] }}
+NTPTimeZone=-06:00
+NTPUpdateInterval=2
+NTPManualOverride=enabled
+
+
+[SystemLinks]
+LinkName1=APC Web Site
+LinkName2=UW UPS GetUPSInfo
+LinkName3=UW UPS Manager
+LinkURL1=https://www.apc.com
+LinkURL2=https://aants.net.wisc.edu/cgi-bin/GetUPSInfo.cgi
+LinkURL3=https://aants.net.wisc.edu/cgi-bin/UPSManager.cgi
+
+[LocalConsole]
+BaudRate=9600
+
+[EventLog]
+EventLogTimeSelect=All Logs
+LogFilterSeverity=0xFF
+LogFilterCategories=0xFFFFFFFFFF
+EventLogSize=1500
+
+[DataLog]
+;    Interval is the Data log recording frequency in seconds. The frequency 
+;    range is from 60 seconds up to 65,535 seconds (18.2 hours).
+;    The default value is 600 seconds(10 minutes).
+;    To change the Log Rotation Password, use the Password keyword. 
+;    i.e., Password=apc
+Interval=600
+LogRotation=disabled
+FTPServer=example.com
+Username=apc
+FilePath=/
+FileName=datalog.txt
+AutoUploadDelay=1
+MaxRetries=1
+FailureWaitTime=10
+DataLogTimeSelect=8 hours
+DataLogUniqueFile=disabled
+DataLogSize=1500
+
+[SmartUPS]
+UPSName=""
+Sensitivity=Normal
+LowBatteryDuration=2
+ReturnDelay=0
+SleepTime=000
+BatteryDate={{ ( custom_fields.upsBasicBatteryLastReplaceDate | to_datetime('%Y-%m-%d') ).strftime('%m/%d/%Y') }}
+AudibleAlarm=disabled
+SimpleSignalShutdown=disabled
+SelfTestSchedule=OnStartUp14Since
+{% if custom_fields.upsExternalBatteries %}
+ExternalBatteries={{ custom_fields.upsExternalBatteries }}
+{% endif %}
+
+[PowerChute]
+;   PowerChute Network Shutdown, provides reliable network based shutdown of 
+;   multiple computer systems to enhance the manageability of APC UPSs in 
+;   datacenter environments. To add a client server, simply list the IP as such:
+;   CurrentPCNSClientIP0=192.168.0.1
+;   To associate an outlet group with a client where the groups are numbered 
+;   0 to n with 0 being the main outlet group (if present on UPS)
+;   PCNSClientIPGroup= 0
+;   To remove a specific client, list the client using the keyword:
+;   RemovePCNSClientIP=192.168.0.2
+;   To remove all configured clients, use the keyword, value pair:
+;   RemoveALLPCNSClientIP=yes
+;   To change the Authentication Phrase, use the AuthPhrase keyword 
+;   i.e., AuthPhrase=apc auth passphrase
+OnBatteryShutdownBehavior=Reboot On Line Return
+PCNSUserName=apc
+OnBatteryShutDownStatus=disabled
+OnBatteryShutDownDelay=120
+HttpEnable=disabled
+HttpsEnable=disabled
+
+[Scheduling]
+; Schedule a shutdown event of the UPS.
+; Format: Event# = Status, Interval, Turn Off Time, Turn On Time, PCNS, Name
+;   Status:         Enabled/Disabled/Delete
+;   Interval:       Once, Daily, 1 Week, 2/4/8 Weeks
+;   Turn Off Time:  Time (Daily), Day Time (Weekly), or Date Time (Once)
+;   Turn On Time:   Time (Daily), Day/'Same Day' Time (Weekly), or Date Time (Once)
+;   PCNS:           Enabled/Disabled (PowerChute Network Shutdowns)
+;   Name:           Text description
+Event1=Not Configured
+Event2=Not Configured
+Event3=Not Configured
+Event4=Not Configured
+Event5=Not Configured
+Event6=Not Configured
+Event7=Not Configured
+Event8=Not Configured
+Event9=Not Configured
+Event10=Not Configured
+Event11=Not Configured
+Event12=Not Configured
+Event13=Not Configured
+Event14=Not Configured
+Event15=Not Configured
+Event16=Not Configured
+
+
+[IntegratedEMU]
+
+[Modbus]
+ModbusEnable=disabled
+
+[HyperFlex]
+Access=disabled
+
+[EventActionConfig]
+
+
+; Network Interface coldstarted.
+; SNMP Trap: 0
+E0001=ES,E[:::],T[:::::]
+
+; Network Interface restarted.
+; SNMP Trap: 1
+E0002=ES,E[:::],T[:::::]
+
+; SNMP configuration change.
+; SNMP Trap: 44
+E0003=ES,E[:::],T[:::::]
+
+; Detected an unauthorized user attempting to access the SNMP interface.
+; SNMP Trap: 4
+E0004=ES,E[:::],T[:::::]
+
+; Detected an unauthorized user attempting to access the SNMPv3 interface.
+E0067=ES,E[:::],T[:::::]
+
+; Detected an unauthorized user attempting to access the Control Console interface.
+; SNMP Trap: 46
+E0005=ES,E[:::],T[:::::]
+
+; Detected an unauthorized user attempting to access the Web interface.
+; SNMP Trap: 47
+E0006=ES,E[:::],T[:::::]
+
+; Detected an unauthorized user attempting to access the FTP interface.
+E0045=ES,E[:::],T[:::::]
+
+; Network service started. 
+E0007=ES,E[:::],T[:::::]
+
+; Password changed.
+; SNMP Trap: 48
+E0008=ES,E[:::],T[:::::]
+
+; Network Interface restarting.
+E0009=ES,E[:::],T[:::::]
+
+; FTP File transfer started.
+E000C=ES,E[:::],T[:::::]
+
+; TFTP File transfer started.
+E000D=ES,E[:::],T[:::::]
+
+; File transfer failed.
+E000F=ES,E[:::],T[:::::]
+
+; CLI user logged in.
+E0014=ES,E[:::],T[:::::]
+
+; Web user logged in.
+E0015=ES,E[:::],T[:::::]
+
+; FTP user logged in.
+E0016=ES,E[:::],T[:::::]
+
+; Reset to Defaults
+E0018=ES,E[:::],T[:::::]
+
+; Initializing data in the file.
+E0019=ES,E[:::],T[:::::]
+
+; Initializing language file to default.
+E0048=ES,E[:::],T[:::::]
+
+; Email information.
+E001A=ES,E[:::],T[:::::]
+
+; TCP/IP stack failure.
+E001D=ES,E[:::],T[:::::]
+
+; CLI user logged out.
+E001E=ES,E[:::],T[:::::]
+
+; Web user logged out.
+E001F=ES,E[:::],T[:::::]
+
+; FTP user logged out.
+E0020=ES,E[:::],T[:::::]
+
+; Set Date or Time.
+E0021=ES,E[:::],T[:::::]
+
+; Trace information.
+E0024=,E[:::],T[:::::]
+
+; Data Log cleared.
+E0023=ES,E[:::],T[:::::]
+
+; Network service information.
+E002A=ES,E[:::],T[:::::]
+
+;  Network service could not start.
+E002B=ES,E[:::],T[:::::]
+
+; Network service stopped.
+E002C=ES,E[:::],T[:::::]
+
+; SSL Error: Invalid certificate.
+E002D=ES,E[:::],T[:::::]
+
+; New certificate loaded.
+E002E=ES,E[:::],T[:::::]
+
+; SSL enabled (now using HTTPS).
+E002F=ES,E[:::],T[:::::]
+
+; SSL disabled (now using HTTP).
+E0030=ES,E[:::],T[:::::]
+
+; Session Management enabled.
+E0039=ES,E[:::],T[:::::]
+
+; Session Management disabled.
+E003A=ES,E[:::],T[:::::]
+
+; WebServer could not start
+E0031=ES,E[:::],T[:::::]
+
+; DNS Network Error
+E0032=ES,E[:::],T[:::::]
+
+; Configuration change. 
+E0033=ES,E[:::],T[:::::]
+
+; Configuration file uploaded complete
+E0034=ES,E[:::],T[:::::]
+
+; SSL information.
+E0036=ES,E[:::],T[:::::]
+
+; SSH/SCP information.
+E0037=ES,E[:::],T[:::::]
+
+; Certificate, host key, and log store information.
+E0038=ES,E[:::],T[:::::]
+
+; Set Daylight Saving Time.
+E003D=ES,E[:::],T[:::::]
+
+; NTP update failure.
+E003F=ES,E[:::],T[:::::]
+
+; Data Log Upload event.
+E0040=ES,E[:::],T[:::::]
+
+; Event Log cleared.
+E0013=ES,E[:::],T[:::::]
+
+; Lost communications event manually cleared.
+E0044=ES,E[:::],T[:::::]
+
+; Invalid feature key entered.
+E0046=ES,E[:::],T[:::::]
+
+; Feature Pack Unknown
+E0047=ES,E[:::],T[:::::]
+
+; NTP update successful.
+E004A=,E[:::],T[:::::]
+
+; Syslog: Bad parameter.
+E004D=ES,E[:::],T[:::::]
+
+; Entering Daylight Savings Time.
+E004B=ES,E[:::],T[:::::]
+
+; Leaving Daylight Savings Time.
+E004C=ES,E[:::],T[:::::]
+
+; Firewall not started.
+E004E=ES,E[:::],T[:::::]
+
+; Firewall Enabled.
+E004F=ES,E[:::],T[:::::]
+
+; Email SSL certificate.
+E0051=ES,E[:::],T[:::::]
+
+; CLI script error.
+E0052=ES,E[:::],T[:::::]
+
+; Unable to process config file.
+E0053=ES,E[:::],T[:::::]
+
+; Lost password procedure initiated.
+E0054=ES,E[:::],T[:::::]
+
+; MTO file error.
+E0055=ES,E[:::],T[:::::]
+
+; USB Mass Storage Device connected.
+E0056=ES,E[:::],T[:::::]
+
+; USB Mass Storage Device disconnected.
+E0057=ES,E[:::],T[:::::]
+
+; Debug file generation.
+E0058=ES,E[:::],T[:::::]
+
+; CLI script file upload complete.
+E0059=ES,E[:::],T[:::::]
+
+; Firewall Disabled.
+E005A=ES,E[:::],T[:::::]
+
+; User '[name]' created.
+E005B=ES,E[:::],T[:::::]
+
+; User '[name]' edited.
+E005C=ES,E[:::],T[:::::]
+
+; User '[name]' deleted.
+E005D=ES,E[:::],T[:::::]
+
+; USB Wi-Fi Device connected.
+E005E=ES,E[:::],T[:::::]
+
+; USB Wi-Fi Device disconnected.
+E005F=ES,E[:::],T[:::::]
+
+; USB Wi-Fi Device error. 
+E0060=ES,E[:::],T[:::::]
+
+; Connected to Wi-Fi access point.
+E0061=ES,E[:::],T[:::::]
+
+; Disconnected from Wi-Fi access point.
+E0062=ES,E[:::],T[:::::]
+
+; Unable to connect to Wi-Fi access point.
+E0063=ES,E[:::],T[:::::]
+
+; EAPoL Event Information.
+; SNMP Trap: 0
+E0068=ES,E[:::],T[:::::]
+
+; UPS: Restored the local network management interface-to-UPS communication.
+; SNMP Trap: 8
+E0101=ES,E[:::],T[:::::]
+
+; UPS: Lost the local network management interface-to-UPS communication.
+; SNMP Trap: 1
+E0102=ES,E[:::],T[:::::]
+
+; UPS: The load exceeds 100% of rated capacity.
+; SNMP Trap: 2
+E0103=ES,E[:::],T[:::::]
+
+; UPS: The load no longer exceeds 100% of rated capacity.
+; SNMP Trap: 33
+E0104=ES,E[:::],T[:::::]
+
+; UPS: Self-Test passed.
+; SNMP Trap: 10
+E0105=ES,E[:::],T[:::::]
+
+; UPS: Self-Test Failed
+; SNMP Trap: 3
+E0106=ES,E[:::],T[:::::]
+
+; UPS: The battery power is too low to support the load; if power fails, the UPS will be shut down immediately.
+; SNMP Trap: 4
+E0107=ES,E[:::],T[:::::]
+
+; UPS: A discharged battery condition no longer exists.
+; SNMP Trap: 38
+E0108=ES,E[:::],T[:::::]
+
+; UPS: On battery power in response to an input power problem.
+; SNMP Trap: 5
+E0109=ES,E[:::],T[:::::]
+
+; UPS: No longer on battery power.
+; SNMP Trap: 9
+E010A=ES,E[:::],T[:::::]
+
+; UPS: Compensating for a low input voltage.
+; SNMP Trap: 6
+E010B=ES,E[:::],T[:::::]
+
+; UPS: No longer compensating for a low input voltage.
+; SNMP Trap: 34
+E010C=ES,E[:::],T[:::::]
+
+; UPS: Compensating for a high input voltage.
+; SNMP Trap: 31
+E010D=ES,E[:::],T[:::::]
+
+; UPS: No longer compensating for a high input voltage.
+; SNMP Trap: 35
+E010E=ES,E[:::],T[:::::]
+
+; UPS: Main input bad.
+; SNMP Trap: 736
+E01B0=ES,E[:::],T[:::::]
+
+; UPS: Main input bad cleared.
+; SNMP Trap: 737
+E01B1=ES,E[:::],T[:::::]
+
+; UPS: The battery power is too low to continue to support the load; the UPS will shut down if input power does not return to normal soon.
+; SNMP Trap: 7
+E010F=ES,E[:::],T[:::::]
+
+; UPS: A low battery condition no longer exists.
+; SNMP Trap: 11
+E0110=ES,E[:::],T[:::::]
+
+; UPS: The output power is now turned on.
+; SNMP Trap: 30
+E0113=ES,E[:::],T[:::::]
+
+; UPS: The output power is turned off.
+; SNMP Trap: 12
+E0114=ES,E[:::],T[:::::]
+
+; UPS: Turned off for a defined period of time in response to a software command, or off while waiting for input power to return to normal.
+; SNMP Trap: 13
+E0115=ES,E[:::],T[:::::]
+
+; UPS: Turned on after a defined period of time, or input power has returned to normal.
+; SNMP Trap: 14
+E0116=ES,E[:::],T[:::::]
+
+; UPS: Started a reboot process.
+; SNMP Trap: 15
+E0117=ES,E[:::],T[:::::]
+
+; UPS: At least one faulty battery exists.
+; SNMP Trap: 17
+E0119=ES,E[:::],T[:::::]
+
+; UPS: A faulty battery no longer exists.
+; SNMP Trap: 36
+E011A=ES,E[:::],T[:::::]
+
+; UPS: In bypass in response to an internal hardware fault.
+; SNMP Trap: 20
+E011B=ES,E[:::],T[:::::]
+
+; UPS: Return from bypass, internal hardware fault no longer present.
+; SNMP Trap: 23
+E01B2=ES,E[:::],T[:::::]
+
+; UPS: In bypass in response to the UPS front-panel or a user-initiated software command, typically for maintenance.
+; SNMP Trap: 21
+E011C=ES,E[:::],T[:::::]
+
+; UPS: Returned from bypass in response to the UPS front-panel, a user-initiated software command, or transition to critical bypass.
+; SNMP Trap: 23
+E01B4=ES,E[:::],T[:::::]
+
+; UPS: In bypass in response to the bypass switch at the UPS, typically for maintenance.
+; SNMP Trap: 22
+E011D=ES,E[:::],T[:::::]
+
+; UPS: Returned from bypass in response to the bypass switch at the UPS.
+; SNMP Trap: 23
+E01B3=ES,E[:::],T[:::::]
+
+; UPS: A bypass power supply not fully functional.
+; SNMP Trap: 24
+E011F=ES,E[:::],T[:::::]
+
+; UPS: A base module fan not operating properly.
+; SNMP Trap: 25
+E0120=ES,E[:::],T[:::::]
+
+; UPS: Restored communication with the battery packs.
+; SNMP Trap: 27
+E0121=ES,E[:::],T[:::::]
+
+; UPS: Lost communication with the battery packs.
+; SNMP Trap: 26
+E0122=ES,E[:::],T[:::::]
+
+; UPS: Runtime Calibration started.
+; SNMP Trap: 28
+E0123=ES,E[:::],T[:::::]
+
+; UPS: Completed a runtime calibration.
+; SNMP Trap: 37
+E0124=ES,E[:::],T[:::::]
+
+; UPS: Graceful shutdown in progress.
+; SNMP Trap: 39
+E0125=ES,E[:::],T[:::::]
+
+; UPS: The graceful shutdown period has ended.
+E014F=ES,E[:::],T[:::::]
+
+; UPS: An automatic voltage regulator (AVR) relay fault exists.
+; SNMP Trap: 55
+E0126=ES,E[:::],T[:::::]
+
+; UPS: An automatic voltage regulator (AVR) relay fault no longer exists.
+; SNMP Trap: 56
+E0127=ES,E[:::],T[:::::]
+
+; UPS: An abnormal output voltage exists.
+; SNMP Trap: 49
+E0128=ES,E[:::],T[:::::]
+
+; UPS: An abnormal output voltage no longer exists.
+; SNMP Trap: 50
+E0129=ES,E[:::],T[:::::]
+
+; UPS: A battery charger fault exists.
+; SNMP Trap: 51
+E012A=ES,E[:::],T[:::::]
+
+; UPS: A battery charger fault no longer exists.
+; SNMP Trap: 52
+E012B=ES,E[:::],T[:::::]
+
+; UPS: The internal battery temperature exceeds the critical threshold.
+; SNMP Trap: 53
+E012C=ES,E[:::],T[:::::]
+
+; UPS: The internal battery temperature no longer exceeds the critical threshold.
+; SNMP Trap: 54
+E012D=ES,E[:::],T[:::::]
+
+; UPS: The battery is not installed properly.
+; SNMP Trap: 80
+E012F=ES,E[:::],T[:::::]
+
+; UPS: The battery is now installed.
+; SNMP Trap: 81
+E0130=ES,E[:::],T[:::::]
+
+; UPS: Started a scheduled shutdown.
+E0131=ES,E[:::],T[:::::]
+
+; UPS: Failed a scheduled shutdown.
+E0132=ES,E[:::],T[:::::]
+
+; UPS: deleted a scheduled shutdown.
+E0133=ES,E[:::],T[:::::]
+
+; UPS: Scheduled actions changed by unknown interface.
+E01C5=ES,E[:::],T[:::::]
+
+; UPS: Scheduled actions changed by unknown interface.
+E01C6=ES,E[:::],T[:::::]
+
+; UPS: The power for the outlet group is now turned on.
+; SNMP Trap: 298
+E0134=ES,E[:::],T[:::::]
+
+; UPS: The power for the outlet group is now turned off.
+; SNMP Trap: 299
+E0135=ES,E[:::],T[:::::]
+
+; UPS: An outlet group has been commanded to change state.
+; SNMP Trap: 732
+E0174=ES,E[:::],T[:::::]
+
+; UPS: Self-Test started.
+E0137=ES,E[:::],T[:::::]
+
+; UPS: An inverter DC imbalance exists.
+; SNMP Trap: 618
+E0138=ES,E[:::],T[:::::]
+
+; UPS: An inverter DC imbalance no longer exists.
+; SNMP Trap: 619
+E0139=ES,E[:::],T[:::::]
+
+; UPS: A base module fan fault no longer exists.
+; SNMP Trap: 637
+E013A=ES,E[:::],T[:::::]
+
+; UPS: An electronics unit fan fault exists.
+E013B=ES,E[:::],T[:::::]
+
+; UPS: An electronics unit fan fault no longer exists.
+E013C=ES,E[:::],T[:::::]
+
+; UPS: A bypass power supply fault no longer exists.
+E013D=ES,E[:::],T[:::::]
+
+; UPS: A main relay fault exists.
+; SNMP Trap: 624
+E013E=ES,E[:::],T[:::::]
+
+; UPS: A main relay fault no longer exists.
+; SNMP Trap: 625
+E013F=ES,E[:::],T[:::::]
+
+; UPS: A bypass relay fault exists.
+; SNMP Trap: 622
+E0140=ES,E[:::],T[:::::]
+
+; UPS: A bypass relay fault no longer exists.
+; SNMP Trap: 623
+E0141=ES,E[:::],T[:::::]
+
+; UPS: An external battery pack was installed.
+E0142=ES,E[:::],T[:::::]
+
+; UPS: An external battery pack was removed.
+E0143=ES,E[:::],T[:::::]
+
+; UPS: Lost the management interface-to-UPS communication while the UPS was on battery.
+; SNMP Trap: 733
+E0148=ES,E[:::],T[:::::]
+
+; UPS: SNMP was used to issue a control command.
+E0149=ES,E[:::],T[:::::]
+
+; UPS: A power factor correction input relay fault exists.
+; SNMP Trap: 502
+E0150=ES,E[:::],T[:::::]
+
+; UPS: A power factor correction input relay fault no longer exists.
+; SNMP Trap: 503
+E0151=ES,E[:::],T[:::::]
+
+; UPS: The internal UPS temperature exceeds the critical threshold.
+; SNMP Trap: 353
+E0152=ES,E[:::],T[:::::]
+
+; UPS: The internal UPS temperature no longer exceeds the critical threshold.
+; SNMP Trap: 354
+E0153=ES,E[:::],T[:::::]
+
+; UPS: The battery voltage exceeds the nominal battery voltage rating.
+; SNMP Trap: 506
+E0154=ES,E[:::],T[:::::]
+
+; UPS: The battery voltage no longer exceeds the nominal battery voltage rating.
+; SNMP Trap: 507
+E0155=ES,E[:::],T[:::::]
+
+; UPS: An EEPROM fault exists.
+; SNMP Trap: 508
+E0156=ES,E[:::],T[:::::]
+
+; UPS: An EEPROM fault no longer exists.
+; SNMP Trap: 509
+E0157=ES,E[:::],T[:::::]
+
+; UPS: A fault exists at the battery temperature sensor.
+; SNMP Trap: 600
+E0159=ES,E[:::],T[:::::]
+
+; UPS: A fault no longer exists at the battery temperature sensor.
+; SNMP Trap: 601
+E015A=ES,E[:::],T[:::::]
+
+; UPS: A battery bus soft start fault exists.
+; SNMP Trap: 602
+E015B=ES,E[:::],T[:::::]
+
+; UPS: A battery bus soft start fault no longer exists.
+; SNMP Trap: 603
+E015C=ES,E[:::],T[:::::]
+
+; UPS: Battery voltage sense error.
+; SNMP Trap: 734
+E01BB=ES,E[:::],T[:::::]
+
+; UPS: Battery voltage sense error cleared.
+; SNMP Trap: 735
+E01BC=ES,E[:::],T[:::::]
+
+; UPS: The output has a short-circuit.
+; SNMP Trap: 604
+E015D=ES,E[:::],T[:::::]
+
+; UPS: The output no longer has a short-circuit.
+; SNMP Trap: 605
+E015E=ES,E[:::],T[:::::]
+
+; UPS: An output relay fault exists.
+; SNMP Trap: 606
+E015F=ES,E[:::],T[:::::]
+
+; UPS: An output relay fault no longer exists.
+; SNMP Trap: 607
+E0160=ES,E[:::],T[:::::]
+
+; UPS: A power factor correction fault exists.
+; SNMP Trap: 608
+E0161=ES,E[:::],T[:::::]
+
+; UPS: A power factor correction fault no longer exists.
+; SNMP Trap: 609
+E0162=ES,E[:::],T[:::::]
+
+; UPS: A DC bus overvoltage exists.
+; SNMP Trap: 610
+E0163=ES,E[:::],T[:::::]
+
+; UPS: A DC bus overvoltage no longer exists.
+; SNMP Trap: 611
+E0164=ES,E[:::],T[:::::]
+
+; UPS: An inverter fault exists.
+; SNMP Trap: 612
+E0165=ES,E[:::],T[:::::]
+
+; UPS: An inverter fault no longer exists.
+; SNMP Trap: 613
+E0166=ES,E[:::],T[:::::]
+
+; UPS: Overcurrent (Bang bang fault)
+; SNMP Trap: 734
+E01A6=ES,E[:::],T[:::::]
+
+; UPS: Overcurrent (Bang bang fault) cleared
+; SNMP Trap: 735
+E01A7=ES,E[:::],T[:::::]
+
+; UPS: Bypass PFC relay fault
+; SNMP Trap: 734
+E01A8=ES,E[:::],T[:::::]
+
+; UPS: Bypass PFC relay fault cleared
+; SNMP Trap: 735
+E01A9=ES,E[:::],T[:::::]
+
+; UPS: DC bus soft start fault
+; SNMP Trap: 734
+E01AA=ES,E[:::],T[:::::]
+
+; UPS: DC bus soft start fault cleared
+; SNMP Trap: 735
+E01AB=ES,E[:::],T[:::::]
+
+; UPS: Green relay error.
+; SNMP Trap: 734
+E01BD=ES,E[:::],T[:::::]
+
+; UPS: Green relay error cleared.
+; SNMP Trap: 735
+E01BE=ES,E[:::],T[:::::]
+
+; UPS: DC output error.
+; SNMP Trap: 734
+E01BF=ES,E[:::],T[:::::]
+
+; UPS: DC output error cleared.
+; SNMP Trap: 735
+E01C0=ES,E[:::],T[:::::]
+
+; UPS: DC bus converter error.
+; SNMP Trap: 734
+E01C1=ES,E[:::],T[:::::]
+
+; UPS: DC bus converter error cleared.
+; SNMP Trap: 735
+E01C2=ES,E[:::],T[:::::]
+
+; UPS: Power system sensor error.
+; SNMP Trap: 734
+E01C3=ES,E[:::],T[:::::]
+
+; UPS: Power system sensor error cleared.
+; SNMP Trap: 735
+E01C4=ES,E[:::],T[:::::]
+
+; UPS: An analog-to-digital (A/D) converter fault exists.
+; SNMP Trap: 614
+E0167=ES,E[:::],T[:::::]
+
+; UPS: An analog-to-digital (A/D) converter fault no longer exists.
+; SNMP Trap: 615
+E0168=ES,E[:::],T[:::::]
+
+; UPS: A logic power supply fault exists.
+; SNMP Trap: 616
+E0169=ES,E[:::],T[:::::]
+
+; UPS: A logic power supply fault no longer exists.
+; SNMP Trap: 617
+E016A=ES,E[:::],T[:::::]
+
+; UPS: A backfeed relay fault exists.
+; SNMP Trap: 620
+E016B=ES,E[:::],T[:::::]
+
+; UPS: A backfeed relay fault no longer exists.
+; SNMP Trap: 621
+E016C=ES,E[:::],T[:::::]
+
+; UPS: An internal UPS communication fault exists.
+; SNMP Trap: 730
+E0172=ES,E[:::],T[:::::]
+
+; UPS: An internal UPS communication fault no longer exists.
+; SNMP Trap: 731
+E0173=ES,E[:::],T[:::::]
+
+; UPS: Started a scheduled switched outlet group shutdown.
+E017C=ES,E[:::],T[:::::]
+
+; UPS: Failed a scheduled switched outlet group shutdown.
+E017D=ES,E[:::],T[:::::]
+
+; UPS: Deleted a scheduled switched outlet group shutdown.
+E017E=ES,E[:::],T[:::::]
+
+; UPS: Communication debug:  [1.unknown].
+E0175=ES,E[:::],T[:::::]
+
+; UPS: Transferring firmware to UPS.
+; SNMP Trap: 758
+E0176=ES,E[:::],T[:::::]
+
+; UPS: Finished UPS firmware transfer 
+; SNMP Trap: 759
+E0177=ES,E[:::],T[:::::]
+
+; UPS: Firmware transfer to UPS failed
+; SNMP Trap: 761
+E0178=ES,E[:::],T[:::::]
+
+; UPS: Firmware transfer to UPS succeeded.
+; SNMP Trap: 760
+E0179=ES,E[:::],T[:::::]
+
+; UPS: UPS has no valid firmware.
+; SNMP Trap: 762
+E017A=ES,E[:::],T[:::::]
+
+; UPS: UPS now has a valid firmware.
+; SNMP Trap: 763
+E017B=ES,E[:::],T[:::::]
+
+; UPS: Contact APC for secure start-up.
+; SNMP Trap: 736
+E017F=ES,E[:::],T[:::::]
+
+; UPS: Secure start-up alarm has been cleared or acknowledged.
+; SNMP Trap: 737
+E0180=ES,E[:::],T[:::::]
+
+; UPS: Warranty expiring soon. Contact APC.
+; SNMP Trap: 736
+E0181=ES,E[:::],T[:::::]
+
+; UPS: Warranty expiring soon alarm has been cleared or acknowledged.
+; SNMP Trap: 737
+E0182=ES,E[:::],T[:::::]
+
+; UPS: Technical check recommended. Contact APC.
+; SNMP Trap: 736
+E0183=ES,E[:::],T[:::::]
+
+; UPS: Technical check recommended alarm has been cleared or acknowledged.
+; SNMP Trap: 737
+E0184=ES,E[:::],T[:::::]
+
+; UPS: The power for the outlet group is turned on.
+E0185=ES,E[:::],T[:::::]
+
+; UPS: The power for the outlet group is turned off.
+E0186=ES,E[:::],T[:::::]
+
+; UPS: Start controlled early shutdown.
+E0187=ES,E[:::],T[:::::]
+
+; UPS: Not a supported UPS.
+E0188=ES,E[:::],T[:::::]
+
+; UPS: Not a supported UPS Fault Cleared.
+E0189=ES,E[:::],T[:::::]
+
+; UPS: Battery near end of life. Order replacement battery.
+; SNMP Trap: 736
+E018A=ES,E[:::],T[:::::]
+
+; UPS: Battery near end of life cleared.
+; SNMP Trap: 737
+E018B=ES,E[:::],T[:::::]
+
+; UPS: Battery measured life near end. Order replacement battery.
+; SNMP Trap: 736
+E01B5=ES,E[:::],T[:::::]
+
+; UPS: Battery measured life near end cleared
+; SNMP Trap: 737
+E01B6=ES,E[:::],T[:::::]
+
+; UPS: Battery life exceeded. Order replacement battery.
+; SNMP Trap: 734
+E018C=ES,E[:::],T[:::::]
+
+; UPS: Battery life exceeded cleared.
+; SNMP Trap: 735
+E018D=ES,E[:::],T[:::::]
+
+; UPS: The battery temperature exceeds the warning threshold.
+; SNMP Trap: 736
+E019A=ES,E[:::],T[:::::]
+
+; UPS: The battery temperature no longer exceeds the warning threshold.
+; SNMP Trap: 737
+E019B=ES,E[:::],T[:::::]
+
+; UPS: Battery general error.
+; SNMP Trap: 734
+E019C=ES,E[:::],T[:::::]
+
+; UPS: Battery general error cleared.
+; SNMP Trap: 735
+E019D=ES,E[:::],T[:::::]
+
+; UPS: Battery communication lost.
+; SNMP Trap: 734
+E019E=ES,E[:::],T[:::::]
+
+; UPS: Battery communication lost cleared.
+; SNMP Trap: 735
+E019F=ES,E[:::],T[:::::]
+
+; UPS: Battery pack disconnected.
+; SNMP Trap: 736
+E01A0=ES,E[:::],T[:::::]
+
+; UPS: Battery pack disconnected cleared.
+; SNMP Trap: 737
+E01A1=ES,E[:::],T[:::::]
+
+; UPS: Battery firmware mismatch.
+; SNMP Trap: 734
+E01A2=ES,E[:::],T[:::::]
+
+; UPS: Battery firmware mismatch cleared.
+; SNMP Trap: 735
+E01A3=ES,E[:::],T[:::::]
+
+; UPS: Battery temperature sensor error.
+; SNMP Trap: 734
+E01A4=ES,E[:::],T[:::::]
+
+; UPS: Battery temperature sensor error cleared.
+; SNMP Trap: 735
+E01A5=ES,E[:::],T[:::::]
+
+; UPS: A local display button fault exists.
+; SNMP Trap: 767
+E0190=ES,E[:::],T[:::::]
+
+; UPS: A local display button fault no longer exists.
+; SNMP Trap: 768
+E0191=ES,E[:::],T[:::::]
+
+; UPS: UPS needs factory setup.
+; SNMP Trap: 769
+E0192=ES,E[:::],T[:::::]
+
+; UPS: UPS no longer needs factory setup.
+; SNMP Trap: 770
+E0193=ES,E[:::],T[:::::]
+
+; UPS: Emergency Power Off (EPO) active.
+; SNMP Trap: 771
+E0194=ES,E[:::],T[:::::]
+
+; UPS: Emergency Power Off (EPO) now inactive.
+; SNMP Trap: 772
+E0195=ES,E[:::],T[:::::]
+
+; UPS: A firmware mismatch fault exists.
+; SNMP Trap: 773
+E0196=ES,E[:::],T[:::::]
+
+; UPS: A firmware mismatch fault no longer exists.
+; SNMP Trap: 774
+E0197=ES,E[:::],T[:::::]
+
+; UPS: An oscillator failure fault exists.
+; SNMP Trap: 775
+E0198=ES,E[:::],T[:::::]
+
+; UPS: An oscillator failure fault no longer exists.
+; SNMP Trap: 776
+E0199=ES,E[:::],T[:::::]
+
+; UPS: A measurement mismatch exists.
+; SNMP Trap: 734
+E01AC=ES,E[:::],T[:::::]
+
+; UPS: A measurement mismatch no longer exists.
+; SNMP Trap: 735
+E01AD=ES,E[:::],T[:::::]
+
+; UPS: A general subsystem error exists.
+; SNMP Trap: 734
+E01AE=ES,E[:::],T[:::::]
+
+; UPS: A general subsystem error no longer exists.
+; SNMP Trap: 735
+E01AF=ES,E[:::],T[:::::]
+
+; UPS: A logic power supply relay error exists.
+; SNMP Trap: 734
+E01D3=ES,E[:::],T[:::::]
+
+; UPS: A logic power supply relay error no longer exists.
+; SNMP Trap: 735
+E01D4=ES,E[:::],T[:::::]
+
+; UPS: Power system error
+; SNMP Trap: 734
+E01B7=ES,E[:::],T[:::::]
+
+; UPS: Power system error cleared
+; SNMP Trap: 735
+E01B8=ES,E[:::],T[:::::]
+
+; UPS: In maintenance mode for fan.
+; SNMP Trap: 736
+E01B9=ES,E[:::],T[:::::]
+
+; UPS: In maintenance mode for fan cleared.
+; SNMP Trap: 737
+E01BA=ES,E[:::],T[:::::]
+
+; UPS: The service bypass has been commanded to bypass.
+; SNMP Trap: 736
+E01C7=ES,E[:::],T[:::::]
+
+; UPS: The service bypass has been commanded to return to UPS power.
+; SNMP Trap: 737
+E01C8=ES,E[:::],T[:::::]
+
+; UPS: The service bypass state is unknown.
+E01C9=ES,E[:::],T[:::::]
+
+; UPS: The service bypass is disconnected.
+; SNMP Trap: 736
+E01CA=ES,E[:::],T[:::::]
+
+; UPS: The service bypass is connected.
+; SNMP Trap: 737
+E01CB=ES,E[:::],T[:::::]
+
+; UPS: The service bypass has an output fault.
+; SNMP Trap: 736
+E01CC=ES,E[:::],T[:::::]
+
+; UPS: The service bypass output fault has cleared.
+; SNMP Trap: 737
+E01CD=ES,E[:::],T[:::::]
+
+; UPS: The service bypass has an internal fault.
+; SNMP Trap: 736
+E01CE=ES,E[:::],T[:::::]
+
+; UPS: The service bypass internal fault has cleared.
+; SNMP Trap: 737
+E01CF=ES,E[:::],T[:::::]
+
+; UPS: In temporary bypass.
+; SNMP Trap: 787
+E01D0=ES,E[:::],T[:::::]
+
+; UPS: Returned from temporary bypass.
+; SNMP Trap: 23
+E01D1=ES,E[:::],T[:::::]
+
+; UPS: Self-Test finished.
+E01D2=ES,E[:::],T[:::::]
+
+; UPS: Incompatible battery pack.
+; SNMP Trap: 806
+E01D9=ES,E[:::],T[:::::]
+
+; UPS: Incompatible battery pack no longer present.
+; SNMP Trap: 807
+E01DA=ES,E[:::],T[:::::]
+
+; UPS: A fault exists in the UPS input contact / output relay hardware.
+; SNMP Trap: 802
+E01D5=ES,E[:::],T[:::::]
+
+; UPS: Fault no longer exists in the UPS input contact / output relay hardware.
+; SNMP Trap: 803
+E01D6=ES,E[:::],T[:::::]
+
+; UPS: Air filter requires service.
+; SNMP Trap: 804
+E01D7=ES,E[:::],T[:::::]
+
+; UPS: Air filter no longer requires service.
+; SNMP Trap: 805
+E01D8=ES,E[:::],T[:::::]
+
+; UPS: A power module fault exists.
+; SNMP Trap: 77/0
+E0201=ES,E[:::],T[:::::]
+
+; UPS: A power module fault no longer exists.
+; SNMP Trap: 78/0
+E0202=ES,E[:::],T[:::::]
+
+; UPS: A battery fault exists.
+; SNMP Trap: 77/3
+E0207=ES,E[:::],T[:::::]
+
+; UPS: A battery fault no longer exists.
+; SNMP Trap: 78/3
+E0208=ES,E[:::],T[:::::]
+
+; UPS: A load (kVA) alarm threshold violation exists.
+; SNMP Trap: 77/4
+E0209=ES,E[:::],T[:::::]
+
+; UPS: A load (kVA) alarm threshold violation no longer exists.
+; SNMP Trap: 78/4
+E020A=ES,E[:::],T[:::::]
+
+; UPS: An input voltage or frequency problem prevents switching to bypass mode.
+; SNMP Trap: 77/7
+E020F=ES,E[:::],T[:::::]
+
+; UPS: An input voltage or frequency problem no longer prevents switching to bypass mode.
+; SNMP Trap: 78/7
+E0210=ES,E[:::],T[:::::]
+
+; UPS: In bypass in response to an internal hardware fault
+; SNMP Trap: 77/10
+E0215=ES,E[:::],T[:::::]
+
+; UPS: No longer in bypass.
+; SNMP Trap: 78/10
+E0216=ES,E[:::],T[:::::]
+
+; UPS: In bypass in response to an overload.
+; SNMP Trap: 77/11
+E0217=ES,E[:::],T[:::::]
+
+; UPS: No longer in bypass.
+; SNMP Trap: 78/11
+E0218=ES,E[:::],T[:::::]
+
+; UPS: In bypass for maintenance.
+; SNMP Trap: 77/12
+E0219=ES,E[:::],T[:::::]
+
+; UPS: No longer in bypass.
+; SNMP Trap: 78/12
+E021A=ES,E[:::],T[:::::]
+
+; UPS: System level fan fault exists.
+; SNMP Trap: 77/14
+E021D=ES,E[:::],T[:::::]
+
+; UPS: System level fan fault no longer exists.
+; SNMP Trap: 78/14
+E021E=ES,E[:::],T[:::::]
+
+; UPS: A runtime alarm threshold violation exists.
+; SNMP Trap: 77/19
+E0227=ES,E[:::],T[:::::]
+
+; UPS: A runtime alarm threshold violation no longer exists.
+; SNMP Trap: 78/19
+E0228=ES,E[:::],T[:::::]
+
+; UPS: An extended run frame fault exists.
+; SNMP Trap: 77/20
+E0229=ES,E[:::],T[:::::]
+
+; UPS: An extended run frame fault no longer exists.
+; SNMP Trap: 78/20
+E022A=ES,E[:::],T[:::::]
+
+; UPS: The output voltage is outside its defined limits.
+; SNMP Trap: 77/21
+E022B=ES,E[:::],T[:::::]
+
+; UPS: The output voltage is no longer outside its defined limits.
+; SNMP Trap: 78/21
+E022C=ES,E[:::],T[:::::]
+
+; UPS: A phase synchronization fault exists.
+; SNMP Trap: 77/22
+E022D=ES,E[:::],T[:::::]
+
+; UPS: A phase synchronization fault no longer exists.
+; SNMP Trap: 78/22
+E022E=ES,E[:::],T[:::::]
+
+; UPS: The battery is not installed properly.
+; SNMP Trap: 77/23
+E022F=ES,E[:::],T[:::::]
+
+; UPS: The battery is now installed.
+; SNMP Trap: 78/23
+E0230=ES,E[:::],T[:::::]
+
+; UPS: The battery voltage exceeds the nominal battery voltage rating.
+; SNMP Trap: 77/24
+E0231=ES,E[:::],T[:::::]
+
+; UPS: The battery voltage no longer exceeds the nominal battery voltage rating.
+; SNMP Trap: 78/24
+E0232=ES,E[:::],T[:::::]
+
+; UPS: Non-specific fault; Access UPS keyboard for details.
+; SNMP Trap: 77/25
+E0233=ES,E[:::],T[:::::]
+
+; UPS: Non-specific fault 0 .
+; SNMP Trap: 78/25
+E0234=ES,E[:::],T[:::::]
+
+; UPS: A site wiring fault exists.
+; SNMP Trap: 77/26
+E0235=ES,E[:::],T[:::::]
+
+; UPS: A site wiring fault no longer exists.
+; SNMP Trap: 78/26
+E0236=ES,E[:::],T[:::::]
+
+; UPS: The number of batteries increased.
+; SNMP Trap: 67
+E0241=ES,E[:::],T[:::::]
+
+; UPS: The number of batteries decreased.
+; SNMP Trap: 68
+E0242=ES,E[:::],T[:::::]
+
+; UPS: The number of extended run frames increased.
+; SNMP Trap: 75
+E0249=ES,E[:::],T[:::::]
+
+; UPS: The number of extended run frames decreased.
+; SNMP Trap: 76
+E024A=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q001 has closed.
+; SNMP Trap: 123
+E024D=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q001 has opened.
+; SNMP Trap: 124
+E024E=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q002 has closed.
+; SNMP Trap: 123
+E024F=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q002 has opened.
+; SNMP Trap: 124
+E0250=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q003 has closed.
+; SNMP Trap: 123
+E0251=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q003 has opened.
+; SNMP Trap: 124
+E0252=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q004 has closed.
+; SNMP Trap: 123
+E0253=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q004 has opened.
+; SNMP Trap: 124
+E0254=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q005 has closed.
+; SNMP Trap: 123
+E025B=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q005 has opened.
+; SNMP Trap: 124
+E025C=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q006 has closed.
+; SNMP Trap: 123
+E025D=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q006 has opened.
+; SNMP Trap: 124
+E025E=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q007 has closed.
+; SNMP Trap: 123
+E025F=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q007 has opened.
+; SNMP Trap: 124
+E0260=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q008 has closed.
+; SNMP Trap: 123
+E0261=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q008 has opened.
+; SNMP Trap: 124
+E0262=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q009 has closed.
+; SNMP Trap: 123
+E0263=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q009 has opened.
+; SNMP Trap: 124
+E0264=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q010 has closed.
+; SNMP Trap: 123
+E0265=ES,E[:::],T[:::::]
+
+; UPS: The external Switch Gear Q010 has opened.
+; SNMP Trap: 124
+E0266=ES,E[:::],T[:::::]
+
+; UPS: An emergency power off (EPO) switch is activated.
+; SNMP Trap: 77/15
+E0A01=ES,E[:::],T[:::::]
+
+; UPS: An emergency power off (EPO) switch is no longer activated.
+; SNMP Trap: 78/15
+E0A02=ES,E[:::],T[:::::]
+
+; UPS: A static bypass switch module fault exists.
+; SNMP Trap: 77/16
+E0A03=ES,E[:::],T[:::::]
+
+; UPS: A static bypass switch module fault no longer exists.
+; SNMP Trap: 78/16
+E0A04=ES,E[:::],T[:::::]
+
+; UPS: A system start up configuration fault exists.
+; SNMP Trap: 77/16
+E0A05=ES,E[:::],T[:::::]
+
+; UPS: A system start up configuration fault no longer exists.
+; SNMP Trap: 78/16
+E0A06=ES,E[:::],T[:::::]
+
+; UPS: A power supply unit (PSU) fault exists.
+; SNMP Trap: 77/17
+E0A07=ES,E[:::],T[:::::]
+
+; UPS: A power supply unit (PSU) fault no longer exists.
+; SNMP Trap: 78/17
+E0A08=ES,E[:::],T[:::::]
+
+; UPS: A weak battery exists.
+; SNMP Trap: 77/17
+E0A09=ES,E[:::],T[:::::]
+
+; UPS: A weak battery no longer exists.
+; SNMP Trap: 78/17
+E0A0A=ES,E[:::],T[:::::]
+
+; UPS: A high battery temperature exists.
+; SNMP Trap: 77/18
+E0A0B=ES,E[:::],T[:::::]
+
+; UPS: A high battery temperature no longer exists.
+; SNMP Trap: 78/18
+E0A0C=ES,E[:::],T[:::::]
+
+; UPS: An internal mechanical bypass exists.
+; SNMP Trap: 77/18
+E0A0D=ES,E[:::],T[:::::]
+
+; UPS: An internal mechanical bypass no longer exists.
+; SNMP Trap: 78/18
+E0A0E=ES,E[:::],T[:::::]
+
+; UPS: Lost parallel redundancy.
+; SNMP Trap: 77/19
+E0A0F=ES,E[:::],T[:::::]
+
+; UPS: Restored parallel redundancy.
+; SNMP Trap: 78/19
+E0A10=ES,E[:::],T[:::::]
+
+; UPS: A parallel bus communication fault exists on cable 1.
+; SNMP Trap: 77/19
+E0A11=ES,E[:::],T[:::::]
+
+; UPS: A parallel bus communication fault no longer exists on cable 1.
+; SNMP Trap: 78/19
+E0A12=ES,E[:::],T[:::::]
+
+; UPS: A parallel bus communication fault exists on cable 2.
+; SNMP Trap: 77/20
+E0A13=ES,E[:::],T[:::::]
+
+; UPS: A parallel bus communication fault no longer exists on cable 2.
+; SNMP Trap: 78/20
+E0A14=ES,E[:::],T[:::::]
+
+; UPS: An auxilliary bus communication fault exists.
+; SNMP Trap: 77/20
+E0A15=ES,E[:::],T[:::::]
+
+; UPS: An auxilliary bus communication fault no longer exists.
+; SNMP Trap: 78/20
+E0A16=ES,E[:::],T[:::::]
+
+; UPS: A parallel bus termination fault exists on cable 1.
+; SNMP Trap: 77/21
+E0A17=ES,E[:::],T[:::::]
+
+; UPS: A parallel bus termination fault no longer exists on cable 1.
+; SNMP Trap: 78/21
+E0A18=ES,E[:::],T[:::::]
+
+; UPS: A parallel bus termination fault exists on cable 2.
+; SNMP Trap: 77/21
+E0A19=ES,E[:::],T[:::::]
+
+; UPS: A parallel bus termination fault no longer exists on cable 2.
+; SNMP Trap: 78/21
+E0A1A=ES,E[:::],T[:::::]
+
+; UPS: An auxilliary bus termination fault exists.
+; SNMP Trap: 77/22
+E0A1B=ES,E[:::],T[:::::]
+
+; UPS: An auxilliary bus termination fault no longer exists.
+; SNMP Trap: 78/22
+E0A1C=ES,E[:::],T[:::::]
+
+; UPS: A no master present fault exists in the parallel system.
+; SNMP Trap: 77/22
+E0A1D=ES,E[:::],T[:::::]
+
+; UPS: A no master present fault no longer exists in the parallel system.
+; SNMP Trap: 78/22
+E0A1E=ES,E[:::],T[:::::]
+
+; UPS: An overload exists on a parallel unit.
+; SNMP Trap: 77/23
+E0A1F=ES,E[:::],T[:::::]
+
+; UPS: An overload no longer exists on a parallel unit.
+; SNMP Trap: 78/23
+E0A20=ES,E[:::],T[:::::]
+
+; UPS: A parallel configuration fault exists.
+; SNMP Trap: 77/23
+E0A21=ES,E[:::],T[:::::]
+
+; UPS: A parallel configuration fault no longer exists.
+; SNMP Trap: 78/23
+E0A22=ES,E[:::],T[:::::]
+
+; UPS: The dust filter must be changed soon. Contact APC.
+; SNMP Trap: 77/24
+E0A23=ES,E[:::],T[:::::]
+
+; UPS: The dust filter must be changed alarm has been cleared or acknowledged.
+; SNMP Trap: 78/24
+E0A24=ES,E[:::],T[:::::]
+
+; UPS: The dust filter must be changed immediately. Contact APC.
+; SNMP Trap: 77/24
+E0A25=ES,E[:::],T[:::::]
+
+; UPS: The dust filter must be changed alarm has been cleared or acknowledged.
+; SNMP Trap: 78/24
+E0A26=ES,E[:::],T[:::::]
+
+; Environment: A critical fault exists for external Environmental Monitor input contact 1 ({name} at {location}).
+; SNMP Trap: 18
+E0301=ES,E[:::],T[:::::]
+
+; Environment: A fault no longer exists for external Environmental Monitor input contact 1 ({name} at {location}).
+; SNMP Trap: 19
+E0302=ES,E[:::],T[:::::]
+
+; Environment: A critical fault exists for external Environmental Monitor input contact 2 ({name} at {location}).
+; SNMP Trap: 18
+E0303=ES,E[:::],T[:::::]
+
+; Environment: A fault no longer exists for external Environmental Monitor input contact 2 ({name} at {location}).
+; SNMP Trap: 19
+E0304=ES,E[:::],T[:::::]
+
+; Environment: A critical fault exists for external Environmental Monitor input contact 3 ({name} at {location}).
+; SNMP Trap: 18
+E0305=ES,E[:::],T[:::::]
+
+; Environment: A fault no longer exists for external Environmental Monitor input contact 3 ({name} at {location}).
+; SNMP Trap: 19
+E0306=ES,E[:::],T[:::::]
+
+; Environment: A critical fault exists for external Environmental Monitor input contact 4 ({name} at {location}).
+; SNMP Trap: 18
+E0307=ES,E[:::],T[:::::]
+
+; Environment: A fault no longer exists for external Environmental Monitor input contact 4 ({name} at {location}).
+; SNMP Trap: 19
+E0308=ES,E[:::],T[:::::]
+
+; Environment: A minimum temperature threshold violation exists for external Environmental Monitor sensor 1 ({name} at {location}) reporting under {threshold}.
+; SNMP Trap: 525
+E0331=ES,E[:::],T[:::::]
+
+; Environment: A minimum temperature threshold violation no longer exists for external Environmental Monitor sensor 1 ({name} at {location}).
+; SNMP Trap: 526
+E0332=ES,E[:::],T[:::::]
+
+; Environment: A low temperature threshold violation exists for external Environmental Monitor sensor 1 ({name} at {location}) reporting under {threshold}.
+; SNMP Trap: 59
+E0309=ES,E[:::],T[:::::]
+
+; Environment: A low temperature threshold violation no longer exists for external Environmental Monitor sensor 1 ({name} at {location}).
+; SNMP Trap: 60
+E030A=ES,E[:::],T[:::::]
+
+; Environment: A high temperature threshold violation exists for external Environmental Monitor sensor 1 ({name} at {location}) reporting over {threshold}.
+; SNMP Trap: 59
+E030B=ES,E[:::],T[:::::]
+
+; Environment: A high temperature threshold violation no longer exists for external Environmental Monitor sensor 1 ({name} at {location}).
+; SNMP Trap: 60
+E030C=ES,E[:::],T[:::::]
+
+; Environment: A maximum temperature threshold violation exists for external Environmental Monitor sensor 1 ({name} at {location}) reporting over {threshold}.
+; SNMP Trap: 519
+E032F=ES,E[:::],T[:::::]
+
+; Environment: A maximum temperature threshold violation no longer exists for external Environmental Monitor sensor 1 ({name} at {location}).
+; SNMP Trap: 520
+E0330=ES,E[:::],T[:::::]
+
+; Environment: A minimum humidity threshold violation exists for external Environmental Monitor sensor 1 ({name} at {location}) reporting under {threshold}.
+; SNMP Trap: 541
+E0335=ES,E[:::],T[:::::]
+
+; Environment: A minimum temperature threshold violation no longer exists for external Environmental Monitor sensor 1 ({name} at {location}).
+; SNMP Trap: 542
+E0336=ES,E[:::],T[:::::]
+
+; Environment: A low humidity threshold violation exists for external Environmental Monitor sensor 1 ({name} at {location}) reporting under {threshold}.
+; SNMP Trap: 57
+E030D=ES,E[:::],T[:::::]
+
+; Environment: A low humidity threshold violation no longer exists for external Environmental Monitor sensor 1 ({name} at {location}).
+; SNMP Trap: 58
+E030E=ES,E[:::],T[:::::]
+
+; Environment: A high humidity threshold violation exists for external Environmental Monitor sensor 1 ({name} at {location}) reporting over {threshold}.
+; SNMP Trap: 57
+E030F=ES,E[:::],T[:::::]
+
+; Environment: A high humidity threshold violation no longer exists for external Environmental Monitor sensor 1 ({name} at {location}).
+; SNMP Trap: 58
+E0310=ES,E[:::],T[:::::]
+
+; Environment: A maximum humidity threshold violation exists for external Environmental Monitor sensor 1 ({name} at {location}) reporting over {threshold}.
+; SNMP Trap: 535
+E0333=ES,E[:::],T[:::::]
+
+; Environment: A maximum humidity threshold violation no longer exists for external Environmental Monitor sensor 1 ({name} at {location}).
+; SNMP Trap: 536
+E0334=ES,E[:::],T[:::::]
+
+; Environment: A minimum temperature threshold violation exists for external Environmental Monitor sensor 2 ({name} at {location}) reporting under {threshold}.
+; SNMP Trap: 525
+E0339=ES,E[:::],T[:::::]
+
+; Environment: A minimum temperature threshold violation no longer exists for external Environmental Monitor sensor 2 ({name} at {location}).
+; SNMP Trap: 526
+E033A=ES,E[:::],T[:::::]
+
+; Environment: A low temperature threshold violation exists for external Environmental Monitor sensor 2 ({name} at {location}) reporting under {threshold}.
+; SNMP Trap: 63
+E0311=ES,E[:::],T[:::::]
+
+; Environment: A low temperature threshold violation no longer exists for external Environmental Monitor sensor 2 ({name} at {location}).
+; SNMP Trap: 64
+E0312=ES,E[:::],T[:::::]
+
+; Environment: A high temperature threshold violation exists for external Environmental Monitor sensor 2 ({name} at {location}) reporting over {threshold}.
+; SNMP Trap: 63
+E0313=ES,E[:::],T[:::::]
+
+; Environment: A high temperature threshold violation no longer exists for external Environmental Monitor sensor 2 ({name} at {location}).
+; SNMP Trap: 64
+E0314=ES,E[:::],T[:::::]
+
+; Environment: A maximum temperature threshold violation exists for external Environmental Monitor sensor 2 ({name} at {location}) reporting over {threshold}.
+; SNMP Trap: 519
+E0337=ES,E[:::],T[:::::]
+
+; Environment: A maximum temperature threshold violation no longer exists for external Environmental Monitor sensor 2 ({name} at {location}).
+; SNMP Trap: 520
+E0338=ES,E[:::],T[:::::]
+
+; Environment: A minimum humidity threshold violation exists for external Environmental Monitor sensor 2 ({name} at {location}) reporting under {threshold}.
+; SNMP Trap: 541
+E033D=ES,E[:::],T[:::::]
+
+; Environment: A minimum temperature threshold violation no longer exists for external Environmental Monitor sensor 2 ({name} at {location}).
+; SNMP Trap: 542
+E033E=ES,E[:::],T[:::::]
+
+; Environment: A low humidity threshold violation exists for external Environmental Monitor sensor 2 ({name} at {location}) reporting under {threshold}.
+; SNMP Trap: 61
+E0315=ES,E[:::],T[:::::]
+
+; Environment: A low humidity threshold violation no longer exists for external Environmental Monitor sensor 2 ({name} at {location}).
+; SNMP Trap: 62
+E0316=ES,E[:::],T[:::::]
+
+; Environment: A high humidity threshold violation exists for external Environmental Monitor sensor 2 ({name} at {location}) reporting over {threshold}.
+; SNMP Trap: 61
+E0317=ES,E[:::],T[:::::]
+
+; Environment: A high humidity threshold violation no longer exists for external Environmental Monitor sensor 2 ({name} at {location}).
+; SNMP Trap: 62
+E0318=ES,E[:::],T[:::::]
+
+; Environment: A maximum humidity threshold violation exists for external Environmental Monitor sensor 2 ({name} at {location}) reporting over {threshold}.
+; SNMP Trap: 535
+E033B=ES,E[:::],T[:::::]
+
+; Environment: A maximum humidity threshold violation no longer exists for external Environmental Monitor sensor 2 ({name} at {location}).
+; SNMP Trap: 536
+E033C=ES,E[:::],T[:::::]
+
+; Environment: Restored the local network management interface-to-external Environmental Monitoring Card communication.
+; SNMP Trap: 65
+E0319=ES,E[:::],T[:::::]
+
+; Environment: Lost the local network management interface-to-external Environmental Monitoring Card communication.
+; SNMP Trap: 66
+E031A=ES,E[:::],T[:::::]
+
+; Environment: A critical fault exists for integrated Environmental Monitor input contact  ({name} at {location}).
+; SNMP Trap: 173
+E031B=ES,E[:::],T[:::::]
+
+; Environment: A fault no longer exists for integrated Environmental Monitor input contact  ({name} at {location}).
+; SNMP Trap: 174
+E031C=ES,E[:::],T[:::::]
+
+; Environment: A minimum temperature threshold violation exists for integrated Environmental Monitor sensor ({name} at {location}) reporting under {threshold}.
+; SNMP Trap: 525
+E0329=ES,E[:::],T[:::::]
+
+; Environment: A minimum temperature threshold violation no longer exists for integrated Environmental Monitor sensor ({name} at {location}).
+; SNMP Trap: 526
+E032A=ES,E[:::],T[:::::]
+
+; Environment: A low temperature threshold violation exists for integrated Environmental Monitor sensor ({name} at {location}) reporting under {threshold}.
+; SNMP Trap: 165
+E031D=ES,E[:::],T[:::::]
+
+; Environment: A low temperature threshold violation no longer exists for integrated Environmental Monitor sensor ({name} at {location}).
+; SNMP Trap: 166
+E031E=ES,E[:::],T[:::::]
+
+; Environment: A high temperature threshold violation exists for integrated Environmental Monitor sensor ({name} at {location}) reporting over {threshold}.
+; SNMP Trap: 163
+E031F=ES,E[:::],T[:::::]
+
+; Environment: A high temperature threshold violation no longer exists for integrated Environmental Monitor sensor ({name} at {location}).
+; SNMP Trap: 164
+E0320=ES,E[:::],T[:::::]
+
+; Environment: A maximum temperature threshold violation exists for integrated Environmental Monitor sensor ({name} at {location}) reporting over {threshold}.
+; SNMP Trap: 519
+E0327=ES,E[:::],T[:::::]
+
+; Environment: A maximum temperature threshold violation no longer exists for integrated Environmental Monitor sensor ({name} at {location}).
+; SNMP Trap: 520
+E0328=ES,E[:::],T[:::::]
+
+; Environment: A minimum humidity threshold violation exists for integrated Environmental Monitor sensor ({name} at {location}) reporting under {threshold}.
+; SNMP Trap: 541
+E032D=ES,E[:::],T[:::::]
+
+; Environment: A minimum humidity threshold violation no longer exists for integrated Environmental Monitor sensor ({name} at {location}).
+; SNMP Trap: 542
+E032E=ES,E[:::],T[:::::]
+
+; Environment: A low humidity threshold violation exists for integrated Environmental Monitor sensor ({name} at {location}) reporting under {threshold}.
+; SNMP Trap: 169
+E0321=ES,E[:::],T[:::::]
+
+; Environment: A low humidity threshold violation no longer exists for integrated Environmental Monitor sensor ({name} at {location}).
+; SNMP Trap: 170
+E0322=ES,E[:::],T[:::::]
+
+; Environment: A high humidity threshold violation exists for integrated Environmental Monitor sensor ({name} at {location}) reporting over {threshold}.
+; SNMP Trap: 167
+E0323=ES,E[:::],T[:::::]
+
+; Environment: A high humidity threshold violation no longer exists for integrated Environmental Monitor sensor ({name} at {location}).
+; SNMP Trap: 168
+E0324=ES,E[:::],T[:::::]
+
+; Environment: A maximum humidity threshold violation exists for integrated Environmental Monitor sensor ({name} at {location}) reporting over {threshold}.
+; SNMP Trap: 535
+E032B=ES,E[:::],T[:::::]
+
+; Environment: A maximum humidity threshold violation no longer exists for integrated Environmental Monitor sensor ({name} at {location}).
+; SNMP Trap: 536
+E032C=ES,E[:::],T[:::::]
+
+; Environment: Transition to abnormal state for Integrated Environmental Monitor Output Relay ({name} at {location}).
+; SNMP Trap: 175
+E0325=ES,E[:::],T[:::::]
+
+; Environment: Return to normal state for Integrated Environmental Monitor Output Relay ({name} at {location}).
+; SNMP Trap: 176
+E0326=ES,E[:::],T[:::::]
+
+; Environment: A warning fault exists for external Environmental Monitor input contact 1 ({name} at {location}).
+; SNMP Trap: 18
+E033F=ES,E[:::],T[:::::]
+
+; Environment: A warning fault exists for external Environmental Monitor input contact 2 ({name} at {location}).
+; SNMP Trap: 18
+E0340=ES,E[:::],T[:::::]
+
+; Environment: A warning fault exists for external Environmental Monitor input contact 3 ({name} at {location}).
+; SNMP Trap: 18
+E0341=ES,E[:::],T[:::::]
+
+; Environment: A warning fault exists for external Environmental Monitor input contact 4 ({name} at {location}).
+; SNMP Trap: 18
+E0342=ES,E[:::],T[:::::]
+
+; Environment: A warning fault exists for integrated Environmental Monitor input contact  ({name} at {location}).
+; SNMP Trap: 173
+E0343=ES,E[:::],T[:::::]
+
+; Environment: Restored the local network management interface-to-integrated Environmental Monitor ({name} at {location}) communication.
+; SNMP Trap: 517
+E0344=ES,E[:::],T[:::::]
+
+; Environment: Lost the local network management interface-to-integrated Environmental Monitor ({name} at {location}) communication.
+; SNMP Trap: 518
+E0345=ES,E[:::],T[:::::]
+
+; Environment: Restored the local network management interface-to-external Environmental Monitor sensor {number} ({name} at {location}) communication.
+; SNMP Trap: 517
+E0346=ES,E[:::],T[:::::]
+
+; Environment: Lost the local network management interface-to-external Environmental Monitor sensor {number} ({name} at {location}) communication.
+; SNMP Trap: 518
+E0347=ES,E[:::],T[:::::]
+
+; Environment: Restored the local network management interface-to-external Environmental Monitor input contact {number} ({name} at {location}) communication.
+E0348=ES,E[:::],T[:::::]
+
+; Environment: Lost the local network management interface-to-external Environmental Monitor input contact {number} ({name} at {location}) communication.
+E0349=ES,E[:::],T[:::::]
+
+; UPS: RFC1628 MIB UPS is on battery.
+; SNMP Trap: 1
+E3601=,E[:::],T[:::::]
+
+; UPS: RFC1628 MIB UPS is no longer on battery.
+; SNMP Trap: 0
+E3602=,E[:::],T[:::::]
+
+; UPS: RFC1628 MIB UPS test completed.
+; SNMP Trap: 3
+E3603=,E[:::],T[:::::]
+
+; UPS: RFC1628 MIB alarm entry added.
+; SNMP Trap: 4
+E3604=,E[:::],T[:::::]
+
+; UPS: RFC1628 MIB alarm entry removed.
+; SNMP Trap: 5
+E3605=,E[:::],T[:::::]
+
+; Environment: Transition to abnormal state for {UPS input contact}.
+; SNMP Trap: 1
+E4F01=ES,E[:::],T[:::::]
+
+; Environment: Return to normal state for {UPS input contact}.
+; SNMP Trap: 2
+E4F02=ES,E[:::],T[:::::]
+
+; Environment: Switch to abnormal state for {UPS output relay}.
+; SNMP Trap: 3
+E4F03=ES,E[:::],T[:::::]
+
+; Environment: Return to normal state for {UPS output relay}.
+; SNMP Trap: 4
+E4F04=ES,E[:::],T[:::::]

@@ -1,0 +1,293 @@
+
+<pre>
+######################################################################
+######   C A T     3 6 5 0      P R O C E S S    ######
+######################################################################
+</pre>
+
+<h3>Catalyst WS-C3650 family base setup process</h3>
+
+<h4>
+Ensure the switches are running lanbase license level
+</h4>
+</hr>
+
+<h5>IOS-XE 16.x</h5>
+
+<p>
+?? We have been assured that upgrading a device to 16.x that has a permanent
+built-in license should continue to function but it's not clear what commands
+if any should be run on setup to ensure this, the `license right-to-use` commands
+no longer exist ??
+</p>
+<p>Command output from a WS-C3650-24TS example device</p>
+
+<pre>
+# show license summary
+Smart Licensing is ENABLED
+
+Registration:
+  Status: UNREGISTERED
+  Export-Controlled Functionality: NOT ALLOWED
+
+License Authorization:
+  Status: EVAL MODE
+  Evaluation Period Remaining: 50 days, 8 hours, 1 minutes, 49 seconds
+
+License Usage:
+  License                 Entitlement tag               Count Status
+  -----------------------------------------------------------------------------
+                          (C3650-24 LAN Base)               1 EVAL MODE
+
+# show license status
+Smart Licensing is ENABLED
+
+Utility:
+  Status: DISABLED
+
+Data Privacy:
+  Sending Hostname: yes
+    Callhome hostname privacy: DISABLED
+    Smart Licensing hostname privacy: DISABLED
+  Version privacy: DISABLED
+
+Transport:
+  Type: Callhome
+
+Registration:
+  Status: UNREGISTERED
+  Export-Controlled Functionality: NOT ALLOWED
+
+License Authorization:
+  Status: EVAL MODE
+  Evaluation Period Remaining: 50 days, 8 hours, 3 minutes, 6 seconds
+
+License Conversion:
+  Automatic Conversion Enabled: False
+  Status: Not started
+
+Export Authorization Key:
+  Features Authorized:
+    &lt;none&gt;
+</pre>
+
+<h5>IOS-XE 3.x</h5>
+
+<pre>
+enable
+license right-to-use activate lanbase all acceptEULA
+license right-to-use deactivate ipservices all
+license right-to-use deactivate ipbase all
+reload
+
+!-- Verify after reload
+
+show license right-to-use
+
+!-- Output should resemble:
+
+!--   Slot#  License name   Type     Count   Period left
+!--  ----------------------------------------------------------
+!--   1      lanbase      permanent     N/A   Lifetime
+!--  
+!--  License Level on Reboot: lanbase
+!--  
+!--  
+!--   Slot#  License name   Type     Count   Period left
+!--  ----------------------------------------------------------
+!--   2      lanbase      permanent     N/A   Lifetime
+!--  
+!--  License Level on Reboot: lanbase
+</pre>
+
+<h4>
+Check the above Parameters, If correct bring the box up on the Sandbox vlan
+</h4>
+</hr>
+
+<pre>
+enable 
+configure terminal 
+hostname [% form_inputs.hostname %] 
+ip default-gateway [% tftpserver %] 
+no setup express 
+vtp mode transparent 
+spanning-tree mode rapid-pvst 
+ip tftp blocksize 8192
+interface Vlan 1 
+ip address [% form_inputs.sandbox_IP_1 %] 255.254.0.0 
+no shutdown
+end 
+write memory 
+!end paste here. 
+
+!--  Verify network connectivity:
+
+ping [% tftpserver %]
+</pre>
+
+<h4>
+Upgrade the code to [% config_context.ios_bin %]
+</h4>
+</hr>
+
+<pre>
+show version
+
+!-- If installed version does not match [% config_context.ios_bin %]
+</pre>
+
+<h5>IOS-XE 16.x</h5>
+
+
+<pre>
+request platform software package clean switch all file flash:
+!-- Answer "y" at prompt "Do you want to proceed"
+
+request platform software package install switch all file http://[% tftpserver %]/tftp/cisco/[% config_context.ios_bin %] force on-reboot new auto-copy
+
+!-- result contains 'SUCCESS: Finished install:'
+</pre>
+
+<p>If HTTP doesn't work you can also transfer files over tftp, just replace the http url with a tftp url in the command</p>
+
+tftp://[% tftpserver %]/cisco/[% config_context.ios_bin %] 
+
+<p><i>NOTE:</i>If transferring files over TFTP there is a bug in 16.x code that may cause the TFTP to fail/timeout (Bug CSCvq01204). 
+If this occurs, change the blocksize to 1468 to prevent UDP fragmentation and re-run step 2:</p>
+
+<pre>
+enable
+configure terminal
+ip tftp blocksize 1468
+end
+write memory
+</pre>
+
+<h5>IOS-XE 3.x</h5>
+<pre>
+software clean force
+software install file http://[% tftpserver %]/tftp/cisco/[% config_context.ios_bin %] on-reboot
+
+!-- result contains 'Finished installing software'
+</pre>
+
+<h4>
+Change the switch number and priority:
+</h4>
+</hr>
+<pre>
+!--  In <STRONG>NON config mode</STRONG>, Change the switch number and priority as needed for all switches in the stack
+
+!--  Example command:  switch 1 priority 15
+
+[% FOREACH stack_pos IN [1 .. form_inputs.height] -%]
+!-- Switch [% stack_pos %]
+switch [% stack_pos %] priority [% 16 - stack_pos %]
+[% END # stack_pos -%]
+</pre>
+
+<h4>
+Change the Jumbo MTU size
+</h4>
+</hr>
+
+<pre>
+enable 
+configure terminal
+system mtu 9198 
+end 
+</pre>
+
+<h4>
+Transfer configuration to switch
+</h4>
+</hr>
+
+<pre>
+enable 
+copy http://[% tftpserver %]/tftp/cisco/base/[% form_inputs.hostname %].conf startup-config
+</pre>
+
+<h4>Reload Switch into new config</h4>
+<pre>
+reload
+</pre>
+
+<h4>
+After reloading, login (using emerg) to box, Generate crypto Key and Finalize Config
+</h4>
+</hr>
+
+<pre>
+!-- You will need to manually reload and create a crypto key 
+
+enable 
+configure terminal
+crypto key generate rsa general-keys modulus 2048
+end 
+wr mem
+
+</pre>
+
+<h4>
+Remove unneeded image files
+</h4>
+
+<h5>IOS-XE 16.x</h5>
+<pre>
+request platform software package clean switch all file flash:
+!-- Answer "y" at prompt "Do you want to proceed"
+</pre>
+
+<h5>IOS-XE 3.x</h5>
+<pre>
+software clean force
+</pre>
+
+<h4>
+Verify that the SDM template is correct by issuing this command: 
+</h4>
+</hr>
+
+<pre>
+<!-- FIXME: why is this not included in the initial config when setting IP? -->
+show sdm prefer
+
+!-- response: "This is the Advanced template."
+<!-- configure terminal -->
+<!-- sdm prefer advanced -->
+<!-- end -->
+</pre>
+
+<h4>
+Verify that the Jumbo MTU setting is correct by issuing this command: 
+</h4>
+</hr>
+
+<pre>
+<!-- FIXME: why is this not included in the initial config when setting IP? -->
+show system mtu 
+
+!-- response: "Global Ethernet MTU is 9198 bytes."
+<!-- configure terminal -->
+<!-- system mtu 9198 -->
+<!-- end -->
+</pre>
+
+<h4>
+Verify that VTP Operating Mode is correct by issuing this command:
+</h4>
+</hr>
+
+<pre>
+<!-- FIXME: why do we check this again as it is set in the initial config? -->
+show vtp status
+
+!-- response: "VTP Operating Mode                : Transparent"
+<!--
+configure terminal
+vtp mode transparent
+end
+-->
+</pre>

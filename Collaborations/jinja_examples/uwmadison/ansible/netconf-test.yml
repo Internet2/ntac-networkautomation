@@ -1,0 +1,32 @@
+---
+- name: NETCONF Test Playbook Foo
+  hosts: s-cssclabtest-*
+  gather_facts: false
+  connection: local
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_connection: ansible.netcommon.netconf
+    ansible_network_os: auto
+    ansible_command_timeout: 90
+    # ansible_port: 22
+  tasks:
+    - name: Get Config
+      ansible.netcommon.netconf_get:
+        display: json
+        filter: <system xmlns="http://openconfig.net/yang/system"/>
+        # <native xmlns="http://cisco.com/ns/yang/Cisco-IOS-XE-native"/>
+        # <vlans xmlns="http://openconfig.net/yang/vlan"/>
+        # <interfaces xmlns="http://openconfig.net/yang/interfaces"/>
+        # source: running
+        # display: xml
+      register: device_config_json
+    - name: print
+      debug:
+        var: device_config_json.output
+
+

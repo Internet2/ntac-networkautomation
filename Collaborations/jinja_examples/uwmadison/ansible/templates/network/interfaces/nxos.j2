@@ -1,0 +1,220 @@
+{% for interface in interfaces if interface.custom_fields.enable_management == 'ansible' %}
+interface {{ interface.name }}
+{% set port_tags = [] %}
+{# FIXME: maybe we can have a tool which resets automation off based on checking in a port without the :AA: tag for incident handling #}
+{{ port_tags.append('A') if interface.custom_fields.enable_management == 'ansible' -}}
+{# {{ port_tags.append('AE') if interface.custom_fields.enable_management == 'edgeconf' -}} #}
+{{ port_tags.append('W(' + interface.custom_fields.wdm_color + ',' + interface.custom_fields.wdm_distance + ')') if interface.custom_fields.wdm_color and interface.custom_fields.wdm_distance -}}
+{{ port_tags.append('M') if interface.custom_fields.enable_netwatch == True -}}
+{{ port_tags.append('!M') if interface.custom_fields.enable_netwatch == False -}}
+{{ port_tags.append('P') if interface.custom_fields.enable_polling == True -}}
+{{ port_tags.append('!P') if interface.custom_fields.enable_polling == False -}}
+{{ port_tags.append('R' + interface.custom_fields.port_role.split('-')[0] ) if interface.custom_fields.port_role -}}
+{% if port_tags %}
+  description :{{ port_tags | join(':') }}: {{ interface.description }}
+{% else %}
+  description {{ interface.description }}
+{% endif %}
+{% if interface.enabled and "Ethernet" not in interface.name %}
+  no shutdown
+{% endif %}
+{% if interface.mode and interface.mode.value == 'access' and 'Ethernet' in interface.name %}
+  switchport
+  switchport mode access
+{% if interface.untagged_vlan %}
+  switchport access vlan {{ interface.untagged_vlan.vid }}
+{% endif %}
+{% if interface.custom_fields.stp_edge == None or interface.custom_fields.stp_edge == True %}
+  spanning-tree port type edge
+  spanning-tree guard root
+{% endif %}
+{% endif %}
+{% if interface.mode and interface.mode.value == 'tagged' %}
+  switchport
+  switchport mode trunk
+{% for vlan in interface.tagged_vlans if interface.tagged_vlans | count %}
+{% set vlan_id = vlan.id | string %}
+{% set netbox_vlan =  query('netbox.netbox.nb_lookup', 'vlans', api_filter='id=' + vlan_id ,api_endpoint=netbox_api, token=netbox_token) %}
+{# FIXME: custom vlan mappings may make more sense on an interface not vlan as one may want interfaces where its _not_ translated #}
+{% if netbox_vlan[0].custom_fields.vlan_translate %}
+  switchport vlan mapping {{ netbox_vlan[0].vid }} {{ netbox_vlan[0].custom_fields.vlan_translate }} 
+{% endif %}
+{# routed VLANs for service nets are always translated when rendered on a physical interface assuming its a radial link #}
+{% if netbox_vlan[0].custom_fields.service_vlan_translate %}
+  switchport vlan mapping {{ netbox_vlan[0].vid }} {{ netbox_vlan[0].custom_fields.service_vlan_translate.split('-')[0] }}
+{% endif %}
+{% endfor %}
+{% set parsed_vlans = interface.tagged_vlans | map(attribute='vid') | list | vlan_parser %}
+  switchport trunk allowed vlan {{ parsed_vlans[0] }}
+{% for i in range (1, parsed_vlans | count) %}
+  switchport trunk allowed vlan add {{ parsed_vlans[i] }}
+{% endfor %}
+{% if interface.custom_fields.stp_edge %}
+  spanning-tree port type edge trunk
+  spanning-tree guard root
+{% endif %}
+{% endif %}
+{% if interface.mode and interface.mode.value == 'tagged-all' %}
+  switchport
+  switchport mode trunk
+  switchport trunk allowed vlan {{ config_context[0].tagged_all}}
+{% if interface.custom_fields.stp_edge %}
+  spanning-tree port type edge trunk
+  spanning-tree guard root
+{% endif %}
+{% endif %}
+{% if interface.custom_fields.fex_fabric %}
+  switchport
+  switchport mode fex-fabric
+{# FIXME: assumes FEX is on a port-channel, may need to maek fex_fabric field hold integer #}
+{% if "port-channel" in interface.name %}
+  fex associate {{ interface.name|replace("port-channel", "") }}
+{% elif interface.lag %}
+  fex associate {{ interface.lag.name|replace("port-channel", "") }}
+{% endif %}
+{% endif %}
+{% if interface.custom_fields.stp_cost %}
+  spanning-tree cost {{ interface.custom_fields.stp_cost|default(10, true) }}
+{% endif %}
+{% if interface.mtu %}
+  mtu {{ interface.mtu | default(9216, true) }}
+{% endif %}
+{# FIXME: waht are rules for vpc orphan-port suspend seems to be active facing ASR and PA devices.  is this for non-vpc trunks/po  #}
+{# IPv4/IPv6 Addressing, OSPF Routing and HSRP #}
+{% if interface.ip_addresses %}
+{# NB: VRFs are associated with IP Addresses and Prefixes, more than one IP may
+   be associated with an interface, if one or more IPs are in a VRF then we put
+   one vrf statment on the interface (not one per IP) and if different IPs are
+   assigend to different VRFs that is an error which won't be detected, first IP
+   wins #}
+{% set vrf_names = interface.ip_addresses | selectattr('vrf') | selectattr('vrf.name') | map(attribute='vrf.name') | list  %}
+{# NB: Collect OSFP Area from the VRF Route Descriptor, or VRF Custom Field
+  (when more than one VRF is in an OSPF Area) or lastly the interface, for where
+  the routing table egresses the VRF into the Global table #}
+{# Performance Note: This does an API lookup for each interface with a VRF and doesn't cache the result #}
+{% set vrf = query('netbox.netbox.nb_lookup', 'vrfs', api_filter="name=" + vrf_names[0], api_endpoint=netbox_api, token=netbox_token) if vrf_names %}
+{% if interface.custom_fields.enable_ospf %}
+{% if vrf and vrf[0].value.rd %}
+{% set ospf_area = vrf[0].value.rd.split(":")[1] | int %}
+{% elif vrf and vrf[0].value.custom_fields.ospf_area %}
+{% set ospf_area = vrf[0].value.custom_fields.ospf_area %}
+{% elif interface.custom_fields.ospf_area %}
+{% set ospf_area = interface.custom_fields.ospf_area %}
+{% else %}
+{% set ospf_area = '0.0.0.0' %}
+{% endif %}
+{% endif %}
+{% if vrf %}
+  vrf member {{ vrf_names[0] }}
+{# NB: Some device specific logic in template for management interface, vrf is normally on IP #}
+{% elif "mgmt" in interface.name and interface.mgmt_only %}
+  vrf member management
+{% endif %}
+{# END VRF config #}
+{# IPv4 config #}
+{% if interface.ip_addresses | selectattr('family.value', 'equalto', 4) | map(attribute='family.value') | list | count %}
+{% if interface.custom_fields.enable_netflow %}
+  ip flow monitor UW-IPv4-DEFAULT input sampler NETFLOW-SAMPLER-512
+{% endif %}
+{# FIXME: do these need to be a toggle, should it default to on? #}
+  ip verify unicast source reachable-via any
+  no ip redirects
+  no ip proxy-arp
+{% for ip_address in interface.ip_addresses if ip_address.family.value == 4 %}
+{% if not ip_address.role %}
+  ip address {{ ip_address.address }}
+{% elif ip_address.role.value == 'secondary' %}
+  ip address {{ ip_address.address }} secondary
+{% endif %}
+{% endfor %}
+{% if interface.custom_fields.enable_ospf %}
+  ip router ospf 10 area {{ ospf_area | ansible.netcommon.ipaddr | default("0.0.0.0", True) }}
+{% endif %}
+{% if interface.custom_fields.enable_multicast %}
+  ip pim sparse-mode
+  ip pim dr-priority {{ config_context[0].pim_priority }}
+  ip igmp access-group {{ config_context[0].igmp_acl_ipv4 }}
+{% endif %}
+{% endif %}
+{# END IPv4 config #}
+{# IPv6 config #}
+{% if interface.ip_addresses | selectattr('family.value', 'equalto', 6) | map(attribute='family.value') | list | count %}
+{% if interface.custom_fields.enable_netflow %}
+  ipv6 flow monitor UW-IPv6-DEFAULT input sampler NETFLOW-SAMPLER-512
+{% endif %}
+  no ipv6 redirects
+  ipv6 verify unicast source reachable-via any
+{% for ip_address in interface.ip_addresses if ip_address.family.value == 6 %}
+  ipv6 address {{ ip_address.address }}
+{% endfor %}
+{% if interface.custom_fields.ipv6_link_local %}
+  ipv6 link-local {{ interface.custom_fields.ipv6_link_local }}
+{% endif %}
+  ipv6 nd ns-interval 5000
+  ipv6 nd reachable-time 900000
+{% if interface.custom_fields.enable_ospf %}
+  ipv6 router ospfv3 1 area {{ ospf_area | ansible.netcommon.ipaddr | default("0.0.0.0", True) }}
+{% endif %}
+{% if interface.custom_fields.enable_multicast %}
+  ipv6 pim sparse-mode
+  ipv6 pim dr-priority {{ config_context[0].pim_priority }}
+{% endif %}
+{% if interface.custom_fields.ipv6_enable_ra %}
+  ! enable router advertisement
+{% endif %}
+{% endif %}
+{# END IPv6 config #}
+{# HSRP config #}
+{% set hsrp_addresses_ipv4 = interface.ip_addresses | selectattr('role') | selectattr('role.value', 'equalto', 'hsrp') | selectattr('family.value', 'equalto', 4) | map(attribute='address') | list %}
+{% set hsrp_addresses_ipv6 = interface.ip_addresses | selectattr('role') | selectattr('role.value', 'equalto', 'hsrp') | selectattr('family.value', 'equalto', 6) | map(attribute='address') | list %}
+{% if hsrp_addresses_ipv4 or hsrp_addresses_ipv6 %}
+  hsrp version 2
+{% if hsrp_addresses_ipv4 %}
+  hsrp 0 
+    authentication text vlan{{ interface.untagged_vlan.vid }}
+    preempt
+{% for ip_address in hsrp_addresses_ipv4 %}
+    ip {{ ip_address.split('/')[0] }}
+{% endfor %}
+{% endif %}
+{% if hsrp_addresses_ipv6 %}
+  hsrp 0 ipv6
+    authentication text vlan{{ interface.untagged_vlan.vid }}
+    preempt 
+{% if interface.custom_fields.ipv6_link_local_hsrp %}
+    ip {{ interface.custom_fields.ipv6_link_local_hsrp }}
+{% endif %}
+{% for ip_address in hsrp_addresses_ipv6 %}
+    ip {{ ip_address.split('/')[0] }}
+{% endfor %}
+{% endif %}
+{% endif %}
+{# END HSRP config #}
+{% endif %}
+{# END IPv4/IPv6 Addressing, OSPF Routing and HSRP config #}
+{# Port-Channel config #}
+{% if interface.lag %}
+{% if interface.custom_fields.lag_mode %}
+  channel-group {{ interface.lag.name|replace("port-channel", "") }} mode {{ interface.custom_fields.lag_mode }}
+{% else %}
+  channel-group {{ interface.lag.name|replace("port-channel", "") }}
+{% endif %}
+{% endif %}
+{# FIXME: this assumes all port-channels on NXOS are in VPC which is probalby not true #}
+{% if interface.type.value == 'lag' %}
+  vpc {{ interface.name|replace("port-channel", "") }}
+{% endif %}
+{# END Port-Channel config #}
+{# DHCP Relay config #}
+{% if interface.custom_fields.enable_dhcp %}
+{% for ip_address in config_context[0][ "dhcp_relay_" + interface.custom_fields.enable_dhcp] %}
+  ip dhcp relay address {{ ip_address }}
+{% endfor %}
+{% endif %}
+{# END DHCP Relay config #}
+{% if interface.enabled and "Ethernet" in interface.name %}
+  no shutdown
+{% endif %}
+
+{% endfor %}
+!

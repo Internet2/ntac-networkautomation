@@ -1,0 +1,4 @@
+user -n security -pw {{ security_user.password }} -pe Administrator -e enable
+user -n device -del device
+user -n readonly -del readonly
+user -n apc -cp apc -e disable

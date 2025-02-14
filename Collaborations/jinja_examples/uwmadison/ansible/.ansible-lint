@@ -1,0 +1,11 @@
+---
+# https://ansible.readthedocs.io/projects/lint/configuring/?h=skip+list#ansible-lint-configuration
+skip_list:
+    # https://ansible.readthedocs.io/projects/lint/rules/name/
+    # disable rule suggesting task names start with uppercase
+    - name[casing]
+    # https://ansible.readthedocs.io/projects/lint/rules/fqcn/
+    # temporarily disable rule requiring actions to use fully qualified names
+    # as I don't know if that is compatable with Ansible 2.9 on netcms1
+    # FIXME: remove this after migrating to RHEL9
+    - fqcn[action-core]

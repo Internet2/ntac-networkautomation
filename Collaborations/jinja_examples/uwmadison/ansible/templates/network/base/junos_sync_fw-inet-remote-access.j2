@@ -1,0 +1,24 @@
+groups {
+    sync_fw-inet-remote-access {
+        firewall {
+            family inet {
+                filter <*> {
+                    replace: term Accept-RESTCONF {
+                        from {
+                            source-prefix-list {
+                                sync_lists-management_ok;
+                                management_ok_this_device;
+                            }
+                            protocol tcp;
+                            destination-port [ {{ junos_rest_https_port | default("3443") }} ];
+                        }
+                        then {
+                            count :accept:tcp:RESTCONF;
+                            accept;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

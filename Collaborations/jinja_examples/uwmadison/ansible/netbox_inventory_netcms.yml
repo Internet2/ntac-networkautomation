@@ -1,0 +1,23 @@
+---
+plugin: netbox.netbox.nb_inventory
+#uncomment api_endpoint and token for vagrant
+#api_endpoint: http://netbox
+#token: 0123456789abcdef0123456789abcdef01234567
+validate_certs: False
+config_context: True
+interfaces: False
+# Incident 6562406 
+timeout: 300
+# fetch_all: no
+# max_uri_length: 1000
+group_by:
+ - sites
+ - device_roles
+ - device_types
+ - tags
+ - platforms
+query_filters:
+ - has_primary_ip: True
+ - status: "staged"
+ - status: "active"
+ - cf_backup_method: "netcms"

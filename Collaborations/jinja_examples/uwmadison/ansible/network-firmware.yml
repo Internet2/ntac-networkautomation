@@ -1,0 +1,6 @@
+---
+# Playbook if you want to deploy and reload in one step
+- name: IOS Code Deployment
+  import_playbook: network-firmware-stage.yml
+- name: IOS Code Reload
+  import_playbook: network-firmware-reload.yml

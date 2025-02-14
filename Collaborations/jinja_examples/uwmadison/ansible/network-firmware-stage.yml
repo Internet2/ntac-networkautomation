@@ -1,0 +1,655 @@
+---
+# Needed for IOS 12.2(58) upgrade to 15.2(4)E10
+- name: AAA RADIUS setup
+  import_playbook: network-radius.yml
+- name: Catalyst IOS Code Deployment
+  # NB: for testing just limit to one host
+  hosts: s-*:r-*
+  gather_facts: false
+  # Ansible collection ansible.netcommon
+  # connection: ansible.netcommon.network_cli
+  # Ansible 2.9 built-in
+  connection: network_cli
+  become: yes
+  become_method: enable
+  serial:
+    - 50
+    - 100
+  # any_errors_fatal: true
+  max_fail_percentage: 20
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
+    # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+    # Ansible collection ansible.netcommon and cisco.ios
+    # ansible_network_os: "cisco.ios.ios"
+    # ansible_network_cli_ssh_type: libssh
+    # Ansible 2.9 built-in
+    ansible_network_os: "ios"
+    ansible_command_timeout: 300
+    ansible_connection_timeout: 1800
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+    platform_family: "{{ platforms[0].split('-')[0] }}"
+    device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+)', '\\1') | first }}"
+    # netdevice_inventory: "{{ query('netbox.netbox.nb_lookup', 'devices', api_filter='status=active has_primary_ip=True', api_endpoint=netbox_api, token=netbox_token) }}"
+    # netbox_vlans: "{{ query('netbox.netbox.nb_lookup', 'vlans', api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}"
+    # ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
+    # ansible_net_config: "{{ lookup('file', '/home/net/cms/' + inventory_hostname + '.conf') }}"
+  tasks:
+    # NB: This is a common style for Ansible IOS upgrade scripting
+    # https://networkproguide.com/example-ansible-playbook-for-updating-cisco-ios-switches/
+    # https://gdykeman.github.io/2018/06/26/ios-upgrades/
+    # https://blog.sys4.de/ansible-upgrade-ios-en.html
+    - name: GATHER SWITCH FACTS
+      ios_facts:
+        gather_subset:
+          - "min"
+          - "hardware"
+      vars:
+        ansible_command_timeout: 30
+
+    - name: Catalyst IOS-XE family code bundle (WS-C4500X)
+      when: "ansible_net_version != config_context[0].ios_version and ansible_net_model is regex('^WS-C4500X')"
+      block:
+        - name: show bootvar
+          ansible.utils.cli_parse:
+            command: show bootvar
+            parser:
+              name: ansible.netcommon.native
+              os: cisco_ios
+            set_fact: cisco_ios_facts
+        - name: Debug variables for IOS-XE
+          debug:
+            verbosity: 1
+            msg: "{{ inventory_hostname }} booted {{ ansible_net_version }} requested {{ config_context[0].ios_version }} config-register {{ cisco_ios_facts.ansible_boot_register }}{% if cisco_ios_facts.ansible_boot_variable is defined %} bootvar {{ cisco_ios_facts.ansible_boot_variable }}{% endif %}"
+        - name: Check bootflash for IOS-XE and ROMMON
+          ios_command:
+            commands:
+              - command: "verify /md5 bootflash:{{ config_context[0].ios_bin }}"
+              - command: "verify /md5 bootflash:{{ config_context[0].ios_rommon }}"
+            retries: 1
+            wait_for:
+              - "result[0] contains {{ config_context[0].ios_md5 }}"
+              - "result[1] contains {{ config_context[0].ios_rommon_md5 }}"
+          ignore_errors: true
+          register: doit_check_firmware
+        - name: Copy IOS-XE and ROMMON to bootflash
+          when: "doit_check_firmware.failed"
+          ios_command:
+            commands:
+              - command: "copy http://{{ config_context[0].tftphost }}/tftp/cisco/{{ config_context[0].ios_bin }} bootflash:{{ config_context[0].ios_bin }}"
+                prompt: '\?'
+                answer: "\r"
+              - command: "copy http://{{ config_context[0].tftphost }}/tftp/cisco/{{ config_context[0].ios_rommon }} bootflash:{{ config_context[0].ios_rommon }}"
+                prompt: '\?'
+                answer: "\r"
+              - command: "verify /md5 bootflash:{{ config_context[0].ios_bin }}"
+              - command: "verify /md5 bootflash:{{ config_context[0].ios_rommon }}"
+              - command: "copy bootflash:{{ config_context[0].ios_bin }} slavebootflash:{{ config_context[0].ios_bin }}"
+                prompt: '\?'
+                answer: "\r"
+              - command: "copy bootflash:{{ config_context[0].ios_rommon }} slavebootflash:{{ config_context[0].ios_rommon }}"
+                prompt: '\?'
+                answer: "\r"
+              - command: "verify /md5 bootflash:{{ config_context[0].ios_bin }}"
+              - command: "verify /md5 bootflash:{{ config_context[0].ios_rommon }}"
+                # - "issu loadversion bootflash:{{ config_context[0].ios_bin }}"
+                # - "issu runversion 1 slavebootflash:{{ config_context[0].ios_bin }}"
+                # - "issu acceptversion 1 bootflash:{{ config_context[0].ios_bin }}"
+                # - "issu commitversion 1 slavebootflash:{{ config_context[0].ios_bin }}"
+            retries: 1
+            wait_for:
+              - "result[0] contains 'bytes copied'"
+              - "result[1] contains 'bytes copied'"
+              - "result[2] contains {{ config_context[0].ios_md5 }}"
+              - "result[3] contains {{ config_context[0].ios_rommon_md5 }}"
+              - "result[6] contains {{ config_context[0].ios_md5 }}"
+              - "result[7] contains {{ config_context[0].ios_rommon_md5 }}"
+          vars:
+            ansible_command_timeout: 3600
+          # async: 1000
+          # poll: 0
+          ignore_errors: "{{ ansible_check_mode }}"
+          changed_when: true
+        # - name: Remove existing bootvars
+        #   when: "cisco_ios_facts.ansible_boot_variable is defined"
+        #   ios_config:
+        #     lines:
+        #     - "no boot system flash {{ item }}"
+        #     save_when: modified
+        #   with_items: "{{ cisco_ios_facts.ansible_boot_variable.split(',1;')[:-1] }}"
+        - name: Set boot variables
+          ios_config:
+            before:
+              - "no boot system"
+            lines:
+              - "boot system flash bootflash:{{ config_context[0].ios_rommon }}"
+              - "boot system flash bootflash:{{ config_context[0].ios_bin }}"
+              # https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst4500/12-2/01xo/configuration/guide/config/supcfg.html#wp1051990
+              # the last digit of the config register is 0x0000=boot to rommon, 0x0001=boot first image found in flash, 0x0002=boot using boot variable order
+              # the first digit is 0x2000=load rommon if boot fails
+              - "config-register 0x2102"
+            save_when: modified
+          register: doit_stage_firmware
+        - name: show bootvar
+          ansible.utils.cli_parse:
+            command: show bootvar
+            parser:
+              name: ansible.netcommon.native
+              os: cisco_ios
+            set_fact: cisco_ios_facts
+        - name: NetCMS Check-in
+          when: "doit_stage_firmware.changed"
+          command:
+            # chdir: "/home/net/cms/"
+            argv:
+              - "/usr/bin/make"
+              - "-f"
+              - "/home/net/cms/Makefile"
+              - "logmsg=ansible {{ ansible_play_name }} stage boot veriable{{ cisco_ios_facts.ansible_boot_variable }} by {{ lookup('env', 'LOGNAME') }}"
+              - "/home/net/cms/{{ inventory_hostname }}.update"
+          delegate_to: localhost
+          register: netcms_make_update
+          failed_when: "'WARN' in netcms_make_update.stdout"
+        - name: Debug command output
+          when: "doit_stage_firmware.stdout is defined"
+          debug:
+            verbosity: 1
+            var: doit_stage_firmware.stdout_lines
+        - name: Debug bootvar
+          debug:
+            verbosity: 1
+            msg: "Config register is {{ cisco_ios_facts.ansible_boot_register }} and BOOT variables {{ cisco_ios_facts.ansible_boot_variable }}"
+    - name: Catalyst IOS-XE family code install (WS-C3650, WS-3850, WS-C3560, C9300, C9300X)
+      when: "ansible_net_version != config_context[0].ios_version and ansible_net_model is regex('^(C9300X?-|WS-C3[68]50)')"
+      block:
+        # FIXME: skip cleanup if the inactive version is the one we are trying to install anyway
+        # - name: Clean up old versions to free up flash (IOS-XE 17.x)
+        #   when: "ansible_net_version is version('17.01.01', 'gt') and ansible_net_version is version('18.01.01', 'lt')"
+        #   ios_command:
+        #     commands:
+        #       - command: "install remove inactive"
+        #         prompt: "Do you want to remove the above files"
+        #         answer: "y"
+        # FIXME: trying to use wait_for in --check mode always gives traceback about Index out of range
+        #        as if result[0] is not correct. is this not populated in --check mode or wrong in some way?
+        # wait_for:
+        #   - result contains SUCCESS
+        - name: Clean up old versions to free up flash (IOS-XE 16.x)
+          when: "ansible_net_version is version('16.01.01', 'gt') and ansible_net_version is version('17.01.01', 'lt')"
+          ios_command:
+            commands:
+              - command: "request platform software package clean switch all file flash:"
+                prompt: "Do you want to proceed"
+                answer: "y"
+            # FIXME: trying to use wait_for in --check mode always gives traceback about Index out of range
+            #        as if result[0] is not correct. is this not populated in --check mode or wrong in some way?
+            # wait_for:
+            #   - result contains SUCCESS
+        - name: Clean up old versions to free up flash (IOS-XE 15.x aka 3.x)
+          when: "ansible_net_version is version('16.01.01', 'lt')"
+          ios_command:
+            commands:
+              - command: "software clean force"
+        - name: Refresh filesystem free space info
+          ios_facts:
+            gather_subset:
+              - "min"
+              - "hardware"
+          vars:
+            ansible_command_timeout: 30
+        - name: show install summary
+          when: "ansible_net_version is version('17.01.01', 'gt')"
+          ansible.utils.cli_parse:
+            command: show install summary
+            parser:
+              name: ansible.netcommon.native
+              os: cisco_ios
+            set_fact: cisco_ios_facts
+        - name: show version provisioned
+          when: "ansible_net_version is version('17.01.01', 'lt')"
+          ansible.utils.cli_parse:
+            command: show version provisioned
+            parser:
+              name: ansible.netcommon.native
+              os: cisco_ios
+            set_fact: cisco_ios_facts
+        - name: Check file size for ios_bin
+          stat:
+            path: "/var/local/tftp/cisco/{{ config_context[0].ios_bin }}"
+            get_checksum: no
+          register: ios_bin
+        # - name: Verify flash has enough free space
+        #   assert:
+        #     that: "ansible_net_filesystems_info['flash:']['spacefree_kb'] > ios_bin.stat.size / 1024"
+        #     msg: "Flash filesystem only has {{ ansible_net_filesystems_info['flash:']['spacefree_kb'] }} out of {{ ansible_net_filesystems_info['flash:']['spacetotal_kb'] }} needs {{ ios_bin.stat.size / 1024 }} KB free"
+        # - name: Verify boot system flash:packages.conf on IOS-XE
+        #   when: "ansible_net_image != 'flash:packages.conf'"
+        #   ios_config:
+        #     running_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
+        #     before:
+        #       - no boot system
+        #     lines:
+        #       - boot system flash:packages.conf
+        #     # match: none
+        #     save_when: always
+        # - name: Verify ip tftp blocksize on IOS-XE
+        #   ios_config:
+        #     running_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
+        #     lines:
+        #       - ip tftp blocksize 1468
+        #     # match: none
+        #     save_when: always
+        - name: Debug variables for IOS-XE (17.x)
+          when: "ansible_net_version is version('17.01.01', 'gt')"
+          debug:
+            verbosity: 1
+            msg: "{{ inventory_hostname }} booted {{ ansible_net_version }} installed {{ cisco_ios_facts.ansible_installed_versions | to_yaml }} requested {{ config_context[0].ios_version }}"
+        - name: Debug variables for IOS-XE (16.x)
+          when: "ansible_net_version is version('17.01.01', 'lt')"
+          debug:
+            verbosity: 1
+            msg: "{{ inventory_hostname }} booted {{ ansible_net_version }} provisioned {{ cisco_ios_facts.ansible_provisioned_version }} requested {{ config_context[0].ios_version }}"
+        - name: Install Process for IOS-XE 17.x
+          # NB: skip deploy if it the intended version is already in the show install summary list
+          when: "ansible_net_version is version('17.01.01', 'gt') and ansible_net_version is version('18.01.01', 'lt') and config_context[0].ios_version not in cisco_ios_facts.ansible_installed_versions"
+          ios_command:
+            commands: "install add file http://{{ config_context[0].tftphost }}/tftp/cisco/{{ config_context[0].ios_bin }}"
+            wait_for: "result[0] contains 'SUCCESS: install_add'"
+            retries: 1
+          vars:
+            ansible_command_timeout: 3600
+          # async: 1000
+          # poll: 0
+          register: doit_stage_firmware
+          ignore_errors: "{{ ansible_check_mode }}"
+          changed_when: true
+          # failed_when: "'FAILED' in doit_stage_firmware.stdout"
+        - name: Install Process for IOS-XE 16.x
+          # NB: skip deploy if its already staged and provisioned version matches requested version
+          when: "ansible_net_version is version('16.01.01', 'gt') and ansible_net_version is version('17.01.01', 'lt') and ansible_net_version is version(cisco_ios_facts.ansible_provisioned_version, 'eq')"
+          ios_command:
+            commands: "request platform software package install switch all file http://{{ config_context[0].tftphost }}/tftp/cisco/{{ config_context[0].ios_bin }} on-reboot new auto-copy"
+            wait_for: "result[0] contains 'SUCCESS: Finished install:'"
+            retries: 1
+          vars:
+            ansible_command_timeout: 3600
+          # async: 1000
+          # poll: 0
+          register: doit_stage_firmware
+          ignore_errors: "{{ ansible_check_mode }}"
+          changed_when: true
+          # failed_when: "'FAILED' in doit_stage_firmware.stdout"
+
+        - name: Install Process for IOS-XE 15.x (aka 3.x)
+          # NB: skip deploy if its already staged and provisioned version matches requested version
+          when: "ansible_net_version is version('16.01.01', 'lt') and ansible_net_version is version(cisco_ios_facts.ansible_provisioned_version, 'eq')"
+          ios_command:
+            commands: "software install file http://{{ config_context[0].tftphost }}/tftp/cisco/{{ config_context[0].ios_bin }} on-reboot new"
+            wait_for: "result[0] contains 'Finished installing software'"
+            retries: 1
+          vars:
+            ansible_command_timeout: 3600
+          # async: 1000
+          # poll: 0
+          register: doit_stage_firmware
+          ignore_errors: "{{ ansible_check_mode }}"
+          changed_when: true
+          # failed_when: "'FAILED' in doit_stage_firmware.stdout"
+        - name: Debug command output
+          when: "doit_stage_firmware.stdout is defined"
+          debug:
+            verbosity: 1
+            var: doit_stage_firmware.stdout_lines
+
+    - name: Catalyst IOS family code install (WS-C3750, WS-3560CX)
+      when: "ansible_net_version != config_context[0].ios_version and ansible_net_model is regex('^WS-C3(750|560CX)')"
+      block:
+        - name: show boot
+          ansible.utils.cli_parse:
+            command: show boot
+            parser:
+              name: ansible.netcommon.native
+              os: cisco_ios
+            set_fact: cisco_ios_facts
+        - name: Check file size for ios_bin
+          stat:
+            path: "/var/local/tftp/cisco/{{ config_context[0].ios_bin }}"
+          register: ios_bin
+        # - name: Verify flash has enough free space
+        #   assert:
+        #     that: "ansible_net_filesystems_info['flash:']['spacefree_kb'] > ios_bin.stat.size / 1024"
+        #     msg: "Flash filesystem only has {{ ansible_net_filesystems_info['flash:']['spacefree_kb'] }} out of {{ ansible_net_filesystems_info['flash:']['spacetotal_kb'] }} needs {{ ios_bin.stat.size / 1024 }} KB free"
+        - name: Debug variables for IOS
+          debug:
+            verbosity: 1
+            msg: "{{ inventory_hostname }} booted {{ ansible_net_version }} image {{ ansible_net_image }} provisioned {{ cisco_ios_facts.ansible_boot_image }} requested {{ config_context[0].ios_version }}"
+        - name: Install process for IOS 12.x
+          # NB: skip deploy if its already staged and we already have set the boot image to the requested version
+          when: "ansible_net_image == cisco_ios_facts.ansible_boot_image"
+          ios_command:
+            commands: "archive download-sw /overwrite /imageonly http://{{ config_context[0].tftphost }}/tftp/cisco/{{ config_context[0].ios_bin }}"
+            wait_for: "result[0] contains 'All software images installed'"
+            retries: 1
+          vars:
+            ansible_command_timeout: 3600
+          # async: 1000
+          # poll: 0
+          register: doit_stage_firmware
+          ignore_errors: "{{ ansible_check_mode }}"
+          changed_when: true
+          # failed_when: "'FAILED' in doit_stage_firmware.stdout or 'Error: ' in doit_stage_firmware.output"
+        - name: Debug command output
+          when: "doit_stage_firmware.stdout is defined"
+          debug:
+            verbosity: 1
+            var: doit_stage_firmware.stdout_lines
+    # - name: Wait for all TFTP deploy tasks to complete
+    #   async_status:
+    #     jid: "{{ doit_stage_firmware.ansible_job_id }}"
+    #   register: job_result
+    #   retries: 100
+    #   delay: 10
+
+    # - name: Debug staging command output
+    #   when: "doit_stage_firmware.stdout is defined"
+    #   blockinfile:
+    #     block: "{{ doit_stage_firmware.stdout }}"
+    #     path: "/tmp/{{ inventory_hostname }}.network-firmware-stage.log"
+    #     create: yes
+    #   delegate_to: localhost
+
+    # NB: this duplicates `show archive config differences` in reload playbook
+    #     but the best time to find out an unexpected config change is when
+    #     staging so it can be fixed before deployment
+    - name: NetCMS Check for unexpected config diff
+      when: "doit_stage_firmware.stdout is defined"
+      command:
+        # FIXME: this calls .update target and is sensitive to CWD
+        chdir: "/home/net/cms/"
+        argv:
+          - /usr/bin/make
+          - -f
+          - /home/net/cms/Makefile
+          - "/home/net/cms/{{ inventory_hostname }}.check"
+      delegate_to: localhost
+      register: netcms_make_check
+      # NetCMS WARN when running-config does not match startup-config and '***************' which is part of the diff header
+      failed_when: "'WARN' in netcms_make_check.stdout or '***************' in netcms_make_check.stdout"
+      changed_when: false
+- name: Nexus NXOS Code Deployment
+  hosts: sn-*:rn-*:!tags_mgmt_vdc
+  gather_facts: false
+  # Ansible collection ansible.netcommon
+  # connection: ansible.netcommon.network_cli
+  # Ansible 2.9 built-in
+  connection: network_cli
+  become: yes
+  become_method: enable
+  serial:
+    - 50
+    - 100
+  # any_errors_fatal: true
+  max_fail_percentage: 20
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
+    # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+    # Ansible collection ansible.netcommon and cisco.nxos
+    # ansible_network_os: "cisco.nxos.nxos"
+    # ansible_network_cli_ssh_type: libssh
+    # Ansible 2.9 built-in
+    ansible_network_os: "nxos"
+    ansible_command_timeout: 300
+    ansible_connection_timeout: 1800
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+    platform_family: "{{ platforms[0].split('-')[0] }}"
+    device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+\\w+?|c9\\d+|n\\dk-c\\w+)', '\\1') | first }}"
+    # netdevice_inventory: "{{ query('netbox.netbox.nb_lookup', 'devices', api_filter='status=active has_primary_ip=True', api_endpoint=netbox_api, token=netbox_token) }}"
+    # netbox_vlans: "{{ query('netbox.netbox.nb_lookup', 'vlans', api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}"
+    # ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
+    # ansible_net_config: "{{ lookup('file', '/home/net/cms/' + inventory_hostname + '.conf') }}"
+  tasks:
+    # NB: This is a common style for Ansible IOS upgrade scripting
+    # https://networkproguide.com/example-ansible-playbook-for-updating-cisco-ios-switches/
+    # https://gdykeman.github.io/2018/06/26/ios-upgrades/
+    # https://blog.sys4.de/ansible-upgrade-ios-en.html
+    - name: GATHER SWITCH FACTS
+      nxos_facts:
+        gather_subset:
+          - "min"
+          # - "hardware"
+      vars:
+        ansible_command_timeout: 30
+    - name: show boot
+      ansible.utils.cli_parse:
+        command: show boot
+        parser:
+          name: ansible.netcommon.native
+          os: cisco_nxos
+        set_fact: cisco_nxos_facts
+    - name: Nexus NXOS code bundle
+      # NB: skip provisioning steps entirely if provisioned filename in show boot
+      #     matches the file we are attempting to deploy, it's already done.
+      when: "ansible_net_version != config_context[0].nxos_version and cisco_nxos_facts.ansible_boot_image != 'bootflash:/' + config_context[0].nxos_bin"
+      block:
+        - name: Debug variables for NXOS
+          debug:
+            verbosity: 1
+            msg: "{{ inventory_hostname }} running {{ ansible_net_version }} requested {{ config_context[0].nxos_version }}"
+        - name: Check bootflash for NXOS
+          when: "config_context[0].nxos_bin is defined"
+          nxos_command:
+            commands:
+              - command: "show file bootflash:/{{ config_context[0].nxos_bin }} md5sum"
+            retries: 1
+            wait_for:
+              - "result[0] contains {{ config_context[0].nxos_md5 }}"
+          ignore_errors: true
+          register: doit_check_firmware_nxos
+        - name: Check bootflash for Kickstart
+          when: "config_context[0].nxos_kickstart_bin is defined"
+          nxos_command:
+            commands:
+              - command: "show file bootflash:/{{ config_context[0].nxos_kickstart_bin }} md5sum"
+            retries: 1
+            wait_for:
+              - "result[0] contains {{ config_context[0].nxos_kickstart_md5 }}"
+          ignore_errors: true
+          register: doit_check_firmware_kickstart
+        - name: Check bootflash for EPLD
+          when: "config_context[0].nxos_epld_bin is defined"
+          nxos_command:
+            commands:
+              - command: "show file bootflash:/{{ config_context[0].nxos_epld_bin }} md5sum"
+            retries: 1
+            wait_for:
+              - "result[0] contains {{ config_context[0].nxos_epld_md5 }}"
+          ignore_errors: true
+          register: doit_check_firmware_epld
+        - name: Check sup-2 bootflash for EPLD
+          when: "config_context[0].nxos_epld_bin is defined and cisco_nxos_facts.ansible_sup_count == 2"
+          nxos_command:
+            commands:
+              - command: "show file bootflash://sup-standby/{{ config_context[0].nxos_epld_bin }} md5sum"
+            retries: 1
+            wait_for:
+              - "result[0] contains {{ config_context[0].nxos_epld_md5 }}"
+          ignore_errors: true
+          register: doit_check_firmware_epld2
+        # FIXME: nxos_facts hardware does not get filesystem free space, we'd need
+        #        to parse that out manually to do these checks, so skipping for now
+        # - name: Check file size for NXOS system image
+        #   when: "config_context[0].nxos_bin is defined"
+        #   stat:
+        #     path: "/var/local/tftp/cisco/{{ config_context[0].nxos_bin }}"
+        #     get_checksum: no
+        #   register: nxos_bin
+        # - name: Verify flash has enough free space
+        #   when: "config_context[0].nxos_bin is defined"
+        #   assert:
+        #     that: "ansible_net_filesystems_info['bootflash:']['spacefree_kb'] > nxos_bin.stat.size / 1024"
+        #     msg: "Bootflash filesystem only has {{ ansible_net_filesystems_info['bootflash:']['spacefree_kb'] }} out of {{ ansible_net_filesystems_info['bootflash:']['spacetotal_kb'] }} needs {{ nxos_bin.stat.size / 1024 }} KB free"
+
+        - name: Copy NXOS to bootflash
+          when: "config_context[0].nxos_bin is defined and doit_check_firmware_nxos.failed"
+          nxos_command:
+            commands:
+              - command: "copy http://{{ config_context[0].tftphost }}/tftp/cisco/{{ config_context[0].nxos_bin }} bootflash:{{ config_context[0].nxos_bin }} vrf management"
+                prompt: '\?'
+                answer: "y"
+              - command: "show file bootflash:/{{ config_context[0].nxos_bin }} md5sum"
+            retries: 1
+            wait_for:
+              - "result[0] contains 'Copy complete'"
+              - "result[1] contains {{ config_context[0].nxos_md5 }}"
+          vars:
+            ansible_command_timeout: 900
+          # async: 1000
+          # poll: 0
+          ignore_errors: "{{ ansible_check_mode }}"
+          changed_when: true
+        - name: Copy Kickstart to bootflash
+          when: "config_context[0].nxos_kickstart_bin is defined and doit_check_firmware_kickstart.failed"
+          nxos_command:
+            commands:
+              - command: "copy http://{{ config_context[0].tftphost }}/tftp/cisco/{{ config_context[0].nxos_kickstart_bin }} bootflash:{{ config_context[0].nxos_kickstart_bin }} vrf management"
+                prompt: '\?'
+                answer: "y"
+              - command: "show file bootflash:/{{ config_context[0].nxos_kickstart_bin }} md5sum"
+            retries: 1
+            wait_for:
+              - "result[0] contains 'Copy complete'"
+              - "result[1] contains {{ config_context[0].nxos_kickstart_md5 }}"
+          vars:
+            ansible_command_timeout: 900
+          # async: 1000
+          # poll: 0
+          ignore_errors: "{{ ansible_check_mode }}"
+          changed_when: true
+        - name: Copy EPLD to bootflash
+          when: "config_context[0].nxos_epld_bin is defined and doit_check_firmware_epld.failed"
+          nxos_command:
+            commands:
+              - command: "copy http://{{ config_context[0].tftphost }}/tftp/cisco/{{ config_context[0].nxos_epld_bin }} bootflash:{{ config_context[0].nxos_epld_bin }} vrf management"
+                prompt: '\?'
+                answer: "y"
+              - command: "show file bootflash:/{{ config_context[0].nxos_epld_bin }} md5sum"
+            retries: 1
+            wait_for:
+              - "result[0] contains 'Copy complete'"
+              - "result[1] contains {{ config_context[0].nxos_epld_md5 }}"
+          vars:
+            ansible_command_timeout: 900
+          # async: 1000
+          # poll: 0
+          ignore_errors: "{{ ansible_check_mode }}"
+          changed_when: true
+        - name: Copy EPLD to sup-standby bootflash
+          when: "config_context[0].nxos_epld_bin is defined and cisco_nxos_facts.ansible_sup_count == 2 and doit_check_firmware_epld2.failed"
+          nxos_command:
+            commands:
+              - command: "copy bootflash:/{{ config_context[0].nxos_epld_bin }} bootflash://sup-standby/{{ config_context[0].nxos_epld_bin }}"
+            retries: 1
+            wait_for:
+              - "result[0] contains 'Copy complete'"
+          vars:
+            ansible_command_timeout: 600
+          # async: 1000
+          # poll: 0
+          ignore_errors: "{{ ansible_check_mode }}"
+          changed_when: true
+        # - name: Install NXOS (N5K, N6K, N7K, N77)
+        #   when: "ansible_net_platform is regex('^N[567][K7]-') and 'foo' == 'bar'"
+        #   nxos_command:
+        #     commands:
+        #     - command: "install all kickstart bootflash:/{{ config_context[0].nxos_kickstart_bin }} system bootflash:/{{ config_context[0].nxos_bin }}"
+        #     retries: 1
+        #     # wait_for:
+        #     #   - "result[0] contains 'Install has been successful.'"
+        #   vars:
+        #     ansible_command_timeout: 900
+        #   # async: 1000
+        #   # poll: 0
+        #   ignore_errors: "{{ ansible_check_mode }}"
+        #   changed_when: true
+        #   register: doit_stage_firmware
+        - name: Install NXOS N9K-C93xx N3K
+          when: "ansible_net_platform is regex('^N9K-C93') or ansible_net_platform is regex('^N3K-')"
+          nxos_command:
+            commands:
+              - command: "install all nxos bootflash:/{{ config_context[0].nxos_bin }} no-reload"
+            retries: 1
+            wait_for:
+              - "result[0] contains 'Install has been successful.'"
+          vars:
+            ansible_command_timeout: 900
+          # async: 1000
+          # poll: 0
+          ignore_errors: "{{ ansible_check_mode }}"
+          changed_when: true
+          register: doit_stage_firmware_n9k_c93
+        # Install process does copy nxos.bin to the second supervisor, but not EPLD file
+        - name: Install NXOS N9K-C95xx
+          when: "ansible_net_platform is regex('^N9K-C95')"
+          nxos_command:
+            commands:
+              - command: "install all nxos bootflash:/{{ config_context[0].nxos_bin }} no-reload"
+            retries: 1
+            # wait_for:
+            #   - "result[0] contains 'Finishing the upgrade, switch will reboot in 10 seconds.'"
+          vars:
+            ansible_command_timeout: 900
+          # async: 1000
+          # poll: 0
+          ignore_errors: "{{ ansible_check_mode }}"
+          changed_when: true
+          register: doit_stage_firmware_n9k_c95
+        # - name: Set boot variable
+        #   nxos_config:
+        #     # before:
+        #     # - "no boot nxos {{ ansible_net_image }}"
+        #     lines:
+        #     - "boot nxos bootflash:/{{ config_context[0].nxos_bin }}"
+        #     save_when: modified
+        #   register: doit_stage_firmware
+        - name: Copy running-config startup-config
+          when: "doit_stage_firmware_n9k_c93.changed or doit_stage_firmware_n9k_c95.changed"
+          nxos_command:
+            commands:
+              - command: "copy running-config startup-config"
+            wait_for: "result[0] contains 'Copy complete'"
+          ignore_errors: "{{ ansible_check_mode }}"
+        - name: NetCMS Check-in
+          when: "doit_stage_firmware_n9k_c93.changed or doit_stage_firmware_n9k_c95.changed"
+          command:
+            # chdir: "/home/net/cms/"
+            argv:
+              - "/usr/bin/make"
+              - "-f"
+              - "/home/net/cms/Makefile"
+              - "logmsg=ansible {{ ansible_play_name }} stage boot nxos bootflash:/{{ config_context[0].nxos_bin }} by {{ lookup('env', 'LOGNAME') }}"
+              - "/home/net/cms/{{ inventory_hostname }}.update"
+          delegate_to: localhost
+          register: netcms_make_update
+          failed_when: "'WARN' in netcms_make_update.stdout"
+        - name: Debug install command output N9K-C95
+          when: "doit_stage_firmware_n9k_c95.stdout is defined"
+          debug:
+            verbosity: 1
+            var: doit_stage_firmware_n9k_c95.stdout_lines
+        - name: Debug install command output N9K-C93
+          when: "doit_stage_firmware_n9k_c93.stdout is defined"
+          debug:
+            verbosity: 1
+            var: doit_stage_firmware_n9k_c93.stdout_lines

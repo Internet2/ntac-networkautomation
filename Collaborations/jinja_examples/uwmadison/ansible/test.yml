@@ -1,0 +1,126 @@
+---
+- name: JunOS config test
+  hosts: rj-cssclabqa-*
+  gather_facts: false
+  # connection: ansible.netcommon.netconf
+  # connection: ansible.netcommon.network_cli
+  # connection: network_cli
+  connection: netconf
+  become: true
+  become_method: enable
+  vars:
+    # interfaces: "{{ query('netbox.netbox.nb_lookup', 'interfaces', api_filter='device=' + inventory_hostname, api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}"
+    # nb_ipaddresses: "{{ query('netbox.netbox.nb_lookup', 'ip-addresses', api_filter='device=' + inventory_hostname) }}"
+    # nb_fhrpaddresses: "{{ query('netbox.netbox.nb_lookup', 'fhrp-group-assignments', api_filter='device=' + inventory_hostname) }}"
+    # netbox_devinfo: "{{ lookup('pipe','/usr/local/ns/bin/devinfo -j netbox-prod') | from_json }}"
+    # netbox_graphql: "{{ netbox_devinfo.connection_method + '://' + netbox_devinfo.attributes.host + ':' + netbox_devinfo.attributes.port + '/graphql/' }}"
+    ansible_python_interpreter: /usr/bin/python3
+    ansible_network_import_modules: true
+    ansible_host_key_auto_add: true
+    ansible_network_os: "junos"
+    # ansible_network_os: junipernetworks.junos.junos
+    ansible_command_timeout: 300
+    ansible_connect_timeout: 300
+    net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+    ansible_user: "{{ net_user.username }}"
+    ansible_password: "{{ net_user.password }}"
+    ansible_become_password: "{{ net_user.enable_password }}"
+    platform_family: "{{ platforms[0].split('-')[0] if platforms is defined else 'UNKN' }}"
+    device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+|n\\dk|n\\d\\d|securesync|sdx|pa|m-\\d+|cordex-cxc|aruba|ap-\\d|poweredge|avocent|equallogic|asr-\\d+|mx\\d+|ex\\d+|srx\\d+|VM)', '\\1') | first if device_types is defined else 'VM' }}"
+    device_type: "{{inventory_hostname.split('-')[0]}}"
+    device_ha: "{{ inventory_hostname.split('-')[5]}}"
+
+    junos_rest_http_port: 3000
+    junos_rest_https_port: 3443
+    junos_rest_https_cert: rest-tls-key
+    opennms_core_ips: "{{ query('netbox.netbox.nb_lookup', 'virtual-machines', api_filter='status=active has_primary_ip=True name__isw=onmscore') |map(attribute='value.primary_ip4.address') | ansible.utils.ipaddr('address') | list }}"
+  tasks:
+    #    - name: Gather Packages
+    #      package_facts:
+    #        manager: auto
+    # FIXZME: needs pysnmp for python36
+    # - name: Gather SNMP Data
+    #   snmp_facts:
+    #    host: "{{ inventory_hostname }}"
+    #    version: v2c
+    #    community: "{{ snmp_devinfo.password }}"
+    #  delegate_to: localhost
+    #    - name: Run junos command
+    #      connection: network_cli
+    #      junos_command:
+    #        commands: show version
+    #      register: show_version
+    #    - name: debug version
+    #      debug:
+    #        var: show_version['stdout_lines']
+    - name: enable netconf
+      connection: network_cli
+      junos_netconf:
+        # state: present
+        # listen_on: 830
+      notify: commit config
+    #    - name: Get Facts
+    # junipernetworks.junos.junos_facts:
+    #      connection: netconf
+    #      junos_facts:
+    # gather_subset: all
+    # gather_network_resources: all
+    # available_network_resources: true
+    # config_format: xml
+    - name: check if cert is created
+      connection: network_cli
+      junos_command:
+        commands: "show security pki local-certificate"
+      #        wait_for: "result[0] contains junos_rest_https_cert"
+      register: show_cert
+    - name: create manual cert
+      when: "show_cert.stdout[0].find(junos_rest_https_cert) == -1"
+      #      connection: network_cli
+      junos_command:
+        commands:
+          - "request security pki generate-key-pair type ecdsa size 384 certificate-id {{ junos_rest_https_cert }}"
+          - 'request security pki local-certificate generate-self-signed certificate-id {{ junos_rest_https_cert }} subject CN={{ inventory_hostname }}.local.net.wisc.edu,OU=net,O=wisc,O=edu email "{{ default_mail_alias }}" domain-name local.net.wisc.edu ip-address {{ primary_ip4 }}'
+        wait_for:
+          - "result[0] contains 'Generated key pair'"
+          - "result[1] contains 'Self-signed certificate generated and loaded successfully'"
+      register: create_cert
+    - name: test rest config
+      junos_config:
+        #        backup: true
+        src: network/base/junos_system_service_rest.j2
+        check_commit: true
+      notify: commit config
+    - name: test firewall config
+      junos_config:
+        #        backup: true
+        src: network/base/junos_sync_fw-inet-remote-access.j2
+        check_commit: true
+      notify: commit config
+
+  #    - name: Debug hostvars
+  #      debug:
+  #        var: hostvars[inventory_hostname]
+  # msg: "{{ inventory_hostname }} {{ ansible_os_family }}-{{ ansible_distribution_major_version }}"
+  # var: ansible_facts
+  # var: hostvars['onmscjore1-lab.doit.wisc.edu']
+  #var: ansible_facts
+  #var: groups
+  # msg: "Hi I'm {{ inventory_hostname }}"
+  handlers:
+    - name: commit config
+      junos_config:
+        confirm_commit: true
+        comment: "ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
+      ignore_errors: "{{ ansible_check_mode }}"
+    - name: NetCMS Check-in
+      listen: "commit config"
+      command:
+        argv:
+          - "/usr/bin/make"
+          - "-f"
+          - "/home/net/cms/Makefile"
+          - "logmsg=ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
+          - "/home/net/cms/{{ inventory_hostname }}.update"
+      delegate_to: localhost
+      register: netcms_make_update
+      failed_when: "'WARN' in netcms_make_update.stdout"

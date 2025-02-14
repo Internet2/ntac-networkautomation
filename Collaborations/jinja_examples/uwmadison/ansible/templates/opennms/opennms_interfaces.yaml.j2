@@ -1,0 +1,121 @@
+---
+{# Make primary address IPv6 if it exists or fallback to IPv4 #}
+{% set primary_ip = primary_ip6 | default(primary_ip4) %}
+{% if requisition in ['Routers', 'Servers', 'WirelessController', 'Firewalls', 'LoadBalancer'] %}
+{# FIXME: use items2dict or similar so we can add the Netbox id and dns_name fields as attributes/description #}
+{% set direct_ips = ( direct_ip_address_list.json.data.device_ips + direct_ip_address_list.json.data.vm_ips ) | default([]) | map(attribute='address') | ansible.utils.ipaddr('address') | list %}
+{% set fhrp_ips = fhrp_ip_address_list.json.data.ip_address_list | default([]) | map(attribute='address') | ansible.utils.ipaddr('address') | list %}
+{% endif %}
+{% for address in direct_ips | default([primary_ip]) %}
+- ip-addr: "{{ address }}"
+{# Aruba WAPs don't have SNMP enabled so we shouldn't try scanning them when provisioning (enlinkd, asset, etc) #}
+{% if address == primary_ip and platform_family != "arubaos" %}
+  snmp-primary: "P"
+{% else %}
+  snmp-primary: "N"
+{% endif %}
+  status: 1
+  monitored-service:
+    - service-name: "ICMP"
+{# FIXME: maybe this could just be a hash lookup in yaml for each device_type
+   or a config_context in Netbox and get rid of if/then logic in templates that
+   requires maintenance over time.  This may require refactoring the firmware update
+   process for IOS/IOSXE/NXOS to manage the version separately from platform #}
+{# NB: Only monitor management services on primary interface #}
+{% if address == primary_ip %}
+{% if platform_family == "aos" %}
+    - service-name: "SNMP"
+    - service-name: "SSH"
+    - service-name: "FTP"
+    - service-name: "HTTPS"
+{% elif platform_family == "arubaos" %}
+{# No services beyond ICMP on Aruba WAPs #}
+{% elif platform_family == "centos" %}
+    - service-name: "SSH"
+{# Use auto-detection of services on servers #}
+{% elif platform_family == "cordex" %}
+    - service-name: "SNMP"
+    - service-name: "SSH"
+    - service-name: "Alpha-Alarms"
+{% elif platform_family == "ios" %}
+    - service-name: "SNMP"
+    - service-name: "SSH"
+{% elif platform_family == "iosxe" %}
+    - service-name: "SNMP"
+    - service-name: "SSH"
+{% elif platform_family == "iosxr" %}
+    - service-name: "SNMP"
+    - service-name: "SSH"
+{% elif platform_family == "junos" %}
+    - service-name: "SNMP"
+    - service-name: "SSH"
+    - service-name: "HTTPS-3443"
+    - service-name: "HTTPS-3443-60s"
+    - service-name: "HTTPS-3443-15m"
+{% elif platform_family == "mm" %}
+    - service-name: "SNMP"
+    - service-name: "SSH"
+    - service-name: "FTP"
+    - service-name: "PPTP-1723"
+    - service-name: "HTTP"
+    - service-name: "HTTP-8080"
+    - service-name: "HTTP-8088"
+    - service-name: "HTTPS"
+    - service-name: "HTTPS-4343"
+    - service-name: "HTTPS-8081"
+    - service-name: "HTTPS-8082"
+{% elif platform_family == "netscaler" %}
+    - service-name: "SNMP"
+    - service-name: "SSH"
+    - service-name: "HTTP"
+    - service-name: "HTTPS"
+{% elif platform_family == "ns" %}
+    - service-name: "SNMP"
+    - service-name: "SSH"
+    - service-name: "HTTP"
+    - service-name: "HTTPS"
+{% elif platform_family == "nxos" %}
+    - service-name: "SNMP"
+    - service-name: "SSH"
+    - service-name: "HTTPS"
+{# - service-name: "HTTPS-60s" #}
+{# - service-name: "HTTPS-15m" #}
+{% elif platform_family == "panos" %}
+    - service-name: "SNMP"
+    - service-name: "SSH"
+    - service-name: "HTTPS"
+    - service-name: "HTTPS-60s"
+{# - service-name: "HTTPS-15m" #}
+{% elif platform_family == "securesyncos" %}
+    - service-name: "SNMP"
+    - service-name: "SSH"
+    - service-name: "NTP"
+{% elif platform_family == "vmware" %}
+    - service-name: "HTTP"
+    - service-name: "HTTPS"
+    - service-name: "VMWare"
+{% endif %}
+{% endif %}
+{% endfor %}
+{% for address in fhrp_ips | default([]) %}
+{# Associate VIPs with primary node only on HA/clusters #}
+{% if 'pri' in device_ha %}
+- ip-addr: "{{ address }}"
+  snmp-primary: "N"
+  status: 1
+  monitored-service:
+    - service-name: "ICMP"
+{# FIXME: add metadata attribute with DNS name, HA info, etc.
+   Unfortunately the docs are very unclear as to what parameters are valid in a requisition.
+   We may need to test add things in the WebUI to see what the REST structure is, which would
+   not show fields that may be supported but are not offered in the requisitions WebUI
+   https://docs.opennms.com/meridian/2023/development/rest/requisitions.html
+   https://docs.opennms.com/meridian/2023/operation/deep-dive/meta-data.html
+   I'm not thinking clearly, there is a definition for exactly what fields are possible
+   in the XML Schema Definition, they just aren't drawing your attention to it in docs.
+   https://xmlns.opennms.org/xsd/config/model-import
+#}
+{# FIXME: for PaloAlto can we add the ifIndex as well? #}
+{% endif %}
+{% endfor %}
+

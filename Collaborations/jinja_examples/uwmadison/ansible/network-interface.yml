@@ -1,0 +1,56 @@
+---
+- name: Interface Builder
+  # FIXME: how do we filter defaults so we don't build all interfaces on all hosts
+  # we will probalby need to have the user specify something to limit without needing
+  # them to lookup and enter the 
+  hosts: device_roles_core:device_roles_node
+  gather_facts: false
+  connection: local
+  vars:
+    # netbox_devinfo: "{{ lookup('pipe','/usr/local/ns/bin/devinfo -j netbox-qa') | from_json }}"
+    # netbox_api: "{{ netbox_devinfo.connection_method }}://{{ netbox_devinfo.attributes.host }}:{{ netbox_devinfo.attributes.port }}/"
+    # netbox_token: "{{ netbox_devinfo.password }}"
+    netbox_api: "{{ lookup('env', 'NETBOX_API') }}"
+    netbox_token: "{{ lookup('env', 'NETBOX_TOKEN') }}"
+    # netdevice_inventory: "{{ query('netbox.netbox.nb_lookup', 'devices', api_filter='status=active has_primary_ip=True', api_endpoint=netbox_api, token=netbox_token) }}"
+    # netbox_vlans: "{{ query('netbox.netbox.nb_lookup', 'vlans', api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}"
+    # interfaces: "{{ query('netbox.netbox.nb_lookup', 'interfaces', api_filter='device=' + inventory_hostname, api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}" 
+  tasks:
+    # - name: Debug Interfaces
+    #   blockinfile:
+    #     path: "/var/local/tftp/ansible/{{ inventory_hostname }}-interfaces.yaml"
+    #     create: true
+    #     block: |
+    #       {{ interfaces | to_yaml }}
+    # - name: Debug Hostvars
+    #   blockinfile:
+    #     path: "/var/local/tftp/ansible/{{ inventory_hostname }}.yaml"
+    #     create: true
+    #     block: |
+    #       {{ hostvars[inventory_hostname] | to_yaml }}
+    # - name: Debug VLANs
+    #   blockinfile:
+    #     path: "/var/local/tftp/ansible/netbox_vlans.yaml"
+    #     create: true
+    #     block: |
+    #       {{ netbox_vlans | to_yaml }}
+    # - name: Provision VLANs
+    #   template:
+    #     backup: yes
+    #     # FIXME: make tftp dir a variable that matches NetCMS config generation
+    #     dest: "/var/local/tftp/ansible/vlans/{{ inventory_hostname }}.conf"
+    #     # newline_sequence: "\r\n"
+    #     # output_encoding: "utf-8"
+    #     src: "network/vlans/{{ platforms[0].split('-')[0] }}.j2"
+    #     # FIXME: do we have a way to sanity check?
+    #     # validate: "command to run with %s option"
+    - name: Provision Interfaces
+      template:
+        backup: yes
+        # FIXME: make tftp dir a variable that matches NetCMS config generation
+        dest: "/var/local/tftp/ansible/interfaces/{{ inventory_hostname }}.conf"
+        # newline_sequence: "\r\n"
+        # output_encoding: "utf-8"
+        src: "network/interfaces/{{ platforms[0].split('-')[0] }}.j2"
+        # FIXME: do we have a way to sanity check?
+        # validate: "command to run with %s option"

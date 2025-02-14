@@ -1,0 +1,223 @@
+- name: Entuity Network Device Provisioning
+  hosts: vlan_area_lab:qa
+  become: false
+  gather_facts: false
+  connection: local
+  # gather_facts: true
+  # Rate limit API access
+  throttle: 10
+  vars:
+    entuity_credentials_dict:
+      none:
+    entuity_inventory_dict:
+      none:
+    platform_family: "{{ platforms[0].split('-')[0] }}"
+    device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+)', '\\1') | first }}"
+    device_type: "{{inventory_hostname.split('-')[0]}}"
+  tags:
+    - entuity
+    - entuity_config
+  tasks:
+    - name: Get Credentials
+      uri:
+        url: "{{ entuity_poll_api }}/credential"
+        headers:
+          Content-Type: "application/json"
+          ENA-API-Key: "{{ entuity_poll_api_devinfo['enable_password'] }}"
+      register: entuity_credentials
+    - name: map credentials to dict
+      set_fact:
+        entuity_credentials_dict: "{{ entuity_credentials_dict | default({}) | combine({item.name: item}) }}"
+      loop: "{{ entuity_credentials.json['items'] }}"
+    # - name: debug creds
+    #   debug:
+    #     var: entuity_credentials_dict
+    # need to serialize this no dup after change
+    # FIXME: creating doesn't seem to work with an unhelpful error
+    # {
+    #  "code": 400,
+    #  "description": "Unprocessable Entity (422) - The server understands the
+    #      content type of the request entity and the syntax of the request entity
+    #      is correct but was unable to process the contained instructions",
+    #  "reasonPhrase": "Bad Request"
+    # }
+    - name: Create CLI Credential
+      when: "devinfo.attributes.name is defined and devinfo.attributes.name not in entuity_credentials_dict and devinfo.connection_method in ['ssh','telnet']"
+      uri:
+        method: POST
+        url: "{{ entuity_poll_api }}/credential"
+        headers:
+          Content-Type: "application/json"
+          ENA-API-Key: "{{ entuity_poll_api_devinfo['enable_password'] }}"
+        body_format: json
+        body:
+          name: "{{ devinfo.attributes.name }}"
+          description: "ansible created by {{ lookup('env', 'LOGNAME') }}"
+          attributes:
+            CliAccessAttributes:
+              method: "{{ devinfo.connection_method | upper }}"
+              port: "{{ '23' if devinfo.connection_method == 'telnet' else '22' }}"
+              username: "{{ devinfo.username }}"
+              password1: "{{ devinfo.password }}"
+              password2: "{{ devinfo.enable_password }}"
+      register: cred_cli_response
+    - name: Update credentials CLI
+      when: "cred_cli_response.json is defined"
+      set_fact:
+        entuity_credentials_dict: "{{ entuity_credentials_dict | default({}) | combine({cred_cli_response.json['name']: cred_cli_response.json}) }}"
+    - name: Create SNMP credential
+      when: "snmp_devinfo.attributes.name is defined and snmp_devinfo.attributes.name not in entuity_credentials_dict and snmp_devinfo.connection_method == 'snmpv2c'"
+      uri:
+        method: POST
+        url: "{{ entuity_poll_api }}/credential"
+        headers:
+          Content-Type: "application/json"
+          ENA-API-Key: "{{ entuity_poll_api_devinfo['enable_password'] }}"
+        body_format: json
+        body:
+          name: "{{ snmp_devinfo.attributes.name }}"
+          description: "ansible created by {{ lookup('env', 'LOGNAME') }}"
+          attributes:
+            SnmpV2Attributes:
+              community: "{{ snmp_devinfo.password }}"
+              writeCommunity: "{{ snmp_devinfo.enable_password }}"
+      register: cred_snmp_response
+    - name: Update credentials SNMP
+      when: "cred_snmp_response.json is defined"
+      set_fact:
+        entuity_credentials_dict: "{{ entuity_credentials_dict | default({}) | combine({cred_snmp_response.json['name']: cred_snmp_response.json}) }}"
+
+    - name: Get Device Inventory
+      uri:
+        url: "{{ entuity_poll_api }}/inventory"
+        headers:
+          Content-Type: "application/json"
+          ENA-API-Key: "{{ entuity_poll_api_devinfo['enable_password'] }}"
+      register: entuity_inventory
+    - name: map devices to dict
+      set_fact:
+        entuity_inventory_dict: "{{ entuity_inventory_dict | default({}) | combine({item.name: item}) }}"
+      loop: "{{ entuity_inventory.json['items'] }}"
+    # - name: debug devices
+    #   debug:
+    #     var: entuity_inventory_dict
+    # FIXME: This doesn't work because I don't see how to specify which SNMP/SSH
+    #        credential group to use in the API, only in the web UI.  Do we need
+    #        to specify creds for each device if using API provisioning?  Is there
+    #        another way to
+    #  {
+    #   "code": 400,
+    #   "description": "SNMP type is required for this management level for device type 'UNCLASSIFIED'",
+    #   "reasonPhrase": "Bad Request"
+    #  }
+    - name: Create Inventory Device
+      when: "inventory_hostname not in entuity_inventory_dict"
+      uri:
+        method: POST
+        url: "{{ entuity_poll_api }}/inventory"
+        headers:
+          Content-Type: "application/json"
+          ENA-API-Key: "{{ entuity_poll_api_devinfo['enable_password'] }}"
+        body_format: json
+        body:
+          name: "{{ inventory_hostname }}"
+          polledName: "{{ primary_ip4 }}"
+          protocol: "IPv4"
+          # polledName: "{{ primary_ip6 if primary_ip6 is defined else primary_ip4 }}"
+          # protocol: "{{ 'IPv6' if primary_ip6 is defined else 'IPv4' }}"
+          deviceType: "{{ entuity_device_types[ device_type ] if entuity_device_types[ device_type ] is defined else 'Unclassified' }}"
+          managementLevel: "{{ 'PING_ONLY' if inventory_hostname.startswith('wa-') else 'FULL' }}"
+          nameUsing: "CUSTOMNAME"
+          snmpType: "v2c"
+          credentialName: "{{ snmp_devinfo.attributes.name }}"
+          # cliMethod: "{{ devinfo.connection_method | upper }}"
+          # cmCredentialName: "{{ devinfo.attributes.name }}"
+      register: inventory_response
+    - name: debug inventory response
+      when: "inventory_response.json is defined"
+      debug:
+        msg: "Discovery of {{ inventory_hostname }} status {{ inventory_response.json['message'] }}"
+    # - name: Update inventory dict
+    #   when: "inventory_response.json is defined"
+    #   set_fact:
+    #     entuity_inventory_dict: "{{ entuity_inventory_dict | default({}) | combine({inventory_response.json['name']: inventory_response.json}) }}"
+    # - name: debug inventory response
+    #   debug:
+    #     var: entuity_inventory_dict
+
+    - name: Get Views
+      uri:
+        url: "{{ entuity_poll_api }}/views"
+        headers:
+          Content-Type: "application/json"
+          ENA-API-Key: "{{ entuity_poll_api_devinfo['enable_password'] }}"
+      register: entuity_views
+    - name: map views to dict
+      set_fact:
+        entuity_views_dict: "{{ entuity_views_dict | default({}) | combine({item.displayName: item}) }}"
+      loop: "{{ entuity_views.json['items'] }}"
+    # - name: debug views
+    #   debug:
+    #     var: entuity_views_dict
+    # - name: get view objects
+    #   loop: "{{ entuity_views.json['items'] }}"
+    #   register: entuity_views_objects
+    #   uri:
+    #     url: "{{ entuity_poll_api }}/views/{{ item.id }}/objects"
+    #     headers:
+    #       Content-Type: "application/json"
+    #       ENA-API-Key: "{{ entuity_poll_api_devinfo['enable_password'] }}"
+    # - name: map view objects to dict
+    #   set_fact:
+    #     entuity_views_objects_dict:
+    #       "{{ item.item.id }}": "{{ item. }}"
+    #   loop: "{{ entuity_views_objects}}"
+    # - name: debug object views
+    #   debug:
+    #     var: entuity_views_objects
+
+    # - name: debug groups
+    #   debug:
+    #     var: group_names
+    - name: Add views for Ansible group_names
+      when: "'My Network/' + item not in entuity_views_dict"
+      loop: "{{ group_names }}"
+      uri:
+        method: POST
+        url: "{{ entuity_poll_api }}/views"
+        headers:
+          ENA-API-Key: "{{ entuity_poll_api_devinfo['enable_password'] }}"
+        body_format: json
+        body:
+          name: "{{ item }}"
+      register: "entuity_views_response"
+    # - name: re-map views to dict
+    #   # FIXME: don't know which response changed so don't know which items to re-process or how to nest loops
+    #   when: "entuity_views_response.changed"
+    #   set_fact:
+    #     entuity_views_dict: "{{ entuity_views_dict | default({}) | combine({item.displayName: item}) }}"
+    #   loop: "{{ entuity_views_response.results[-1].json['items'] }}"
+    # - name: debug response
+    #   debug:
+    #     var: entuity_views_response
+
+    # - name: debug inventory item
+    #   debug:
+    #     var: entuity_inventory_dict[inventory_hostname]
+    - name: Add inventory_hostname to View
+      when: "entuity_views_dict[ 'My Network/' + item ] is defined"
+      loop: "{{ group_names }}"
+      uri:
+        method: PUT
+        url: "{{ entuity_poll_api }}/views/{{ entuity_views_dict[ 'My Network/' + item ]['id'] }}/objects?id={{ entuity_inventory_dict[inventory_hostname]['objectId'] }}"
+        headers:
+          ENA-API-Key: "{{ entuity_con_api_devinfo['enable_password'] }}"
+          Content-Type: "application/json"
+        # body_format: json
+        # body:
+        #   id: "{{ entuity_inventory_dict[inventory_hostname]['id'] }}"
+        #   serverId: "{{ entuity_inventory_dict[inventory_hostname]['serverId']}}"
+      register: entuity_views_put_response
+    # - name: debug put view
+    #   debug:
+    #     var: entuity_views_put_response
