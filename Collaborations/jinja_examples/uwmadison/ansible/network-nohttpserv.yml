@@ -3,7 +3,7 @@
   hosts: s-*:r-*:t-*:VG-*
   gather_facts: false
   connection: ansible.netcommon.network_cli
-  become:  "{{ 'False' if ansible_check_mode else 'True' }}"
+  become: "{{ 'False' if ansible_check_mode else 'True' }}"
   become_method: ansible.netcommon.enable
   serial:
     - 50
@@ -40,7 +40,12 @@
     # ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
     # ansible_net_config: "{{ lookup('file', '/home/net/cms/' + inventory_hostname + '.conf') }}"
     # cisco_http_config: #?
+    __doc__: |
+      Audit that `ip http` is *NOT* enabled on managed IOS/IOS-XE devices
+      as the factory default has a web interface enabled which could accidently
+      be left on, an unnecessary risk
 
+      FIXME: move variables from play-local to `hosts.yml` inventory file
   tasks:
     - name: Set ansible_net_config
       block:
@@ -63,7 +68,6 @@
             msg: "DEBUG {{ inventory_hostname }} {{ ansible_net_hostname }} {{ ansible_net_model }} {{ ansible_net_image }} {{ ansible_net_version }}"
 
     - name: Disable web-based management
-      # This when: clause may be redundant
       when: "'ip http server' in ansible_net_config or 'ip http secure-server' in ansible_net_config"
       cisco.ios.ios_config:
         running_config: "{{ ansible_net_config }}"
@@ -73,12 +77,17 @@
         save_when: never
       notify: "copy running-config startup-config"
     - name: Disable Smart Install (vstack)
-      # when: "ansible_net_version is version('15', 'lt')"
-      # Smartinstall `no vstack` command appears in IOS 12.2(55)
-      # and smartinstall is removed from IOS 15.x IOS-XE 16.x versions
-      # that we have deployed so we only need to check limited legacy versions
-      # https://www.cisco.com/c/en/us/td/docs/switches/lan/smart_install/configuration/guide/smart_install/supported_devices.html#43328
-      # This is created as a list by nb_inventory even though it is only one item
+      vars:
+        __doc__: |
+          `when: "ansible_net_version is version('15', 'lt')"` is not necessary as
+          there are only a handful of legacy devices in service even capable of this (risky) feature.
+
+          Smartinstall `no vstack` command appears in IOS 12.2(55)
+          and smartinstall is removed from IOS 15.x IOS-XE 16.x versions
+          that we have deployed so we only need to check limited legacy versions
+          https://www.cisco.com/c/en/us/td/docs/switches/lan/smart_install/configuration/guide/smart_install/supported_devices.html#43328
+
+          This is created as a list by nb_inventory even though it is only one item
       loop: "{{ platforms }}"
       when: "item.startswith('ios-12-255') or item.startswith('ios-12-258')"
       cisco.ios.ios_config:

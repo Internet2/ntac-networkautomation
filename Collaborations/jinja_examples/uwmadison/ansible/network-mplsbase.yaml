@@ -4,9 +4,7 @@
   hosts: rn-*:&tags_enable_mpls
   gather_facts: false
   # Ansible collection ansible.netcommon
-  # connection: ansible.netcommon.network_cli
-  # Ansible 2.9 built-in
-  connection: network_cli
+  connection: ansible.netcommon.network_cli
   # become: true
   # become_method: enable
   max_fail_percentage: 10
@@ -17,10 +15,8 @@
     # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
     # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
     # Ansible collection ansible.netcommon and cisco.ios
-    # ansible_network_os: "cisco.ios.ios"
+    ansible_network_os: "cisco.ios.ios"
     # ansible_network_cli_ssh_type: libssh
-    # Ansible 2.9 built-in
-    ansible_network_os: "nxos"
     # ansible_command_timeout: 300
     # ansible_connect_timeout: 300
     net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
@@ -31,13 +27,23 @@
     # emergency_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency') | from_json }}"
     netbox_vrfs: "{{ query('netbox.netbox.nb_lookup', 'vrfs', api_filter='status=active tag=enable_mpls', api_endpoint=netbox_api, token=netbox_token)  }}"
     vrf_rds: "{{ netbox_vrfs | json_query('[].value.{name:name, rd:rd}')  }} "
+    __doc__: |
+      EXPERIMENTAL WIP Create MPLS configuration similar to `l3vpn` and `ns-crud` system.
+
+      Using Netbox VRFs with tag `enable_mpls` and extracting the `rd` value(s) to template
+      ```
+      vrf context {{ name }}
+        rd {{ rd }}
+      ```
+
+      FIXME: move variables from play-local to `hosts.yml` inventory file
+
   tasks:
-    # Using Ansible 2.9 built-in generic nxos_config text config module
     - name: Get Config from NetCMS
       set_fact:
         ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
     - name: "Add Route Descriptor to MPLS VRF"
-      nxos_config:
+      cisco.nxos.nxos_config:
         running_config: "{{ ansible_net_config }}"
         parents: "vrf context {{ item.value.name }}"
         lines: "rd {{ item.value.rd }}"

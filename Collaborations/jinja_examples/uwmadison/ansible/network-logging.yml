@@ -4,7 +4,7 @@
   hosts: s-*:r-*:t-*:VG-*
   gather_facts: false
   connection: ansible.netcommon.network_cli
-  become:  "{{ 'False' if ansible_check_mode else 'True' }}"
+  become: "{{ 'False' if ansible_check_mode else 'True' }}"
   become_method: ansible.netcommon.enable
   serial:
     - 50
@@ -40,6 +40,21 @@
     # netbox_vlans: "{{ query('netbox.netbox.nb_lookup', 'vlans', api_endpoint=netbox_api, token=netbox_token) | items2dict(key_name='key', value_name='value') }}"
     # ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
     # ansible_net_config: "{{ lookup('file', '/home/net/cms/' + inventory_hostname + '.conf') }}"
+    __doc__: |
+      Ensure logging is configured according to standard on requested devices
+
+      ```yaml
+      parents:
+        - archive
+        - log config
+      lines:
+        - logging enable
+        - logging size 500
+        - notify syslog contenttype plaintext
+        - hidekeys
+      ```
+
+      FIXME: move variables from play-local to `hosts.yml` inventory file
   tasks:
     - name: Set ansible_net_config
       block:

@@ -1,7 +1,7 @@
 #! /bin/bash
 #
 # run the network-users.yml playbook in check mode for daily report
-# NB: currently only for ios. eg:  --limit 's-*:t-*:r-*'
+# NB: currently only for ios and NXOS eg:  --limit 's-*:t-*:r-*, sn-*:rn-*'
 #
 export ANSIBLE_CALLBACKS_ENABLED=''
 export ANSIBLE_STDOUT_CALLBACK="json"
@@ -13,6 +13,31 @@ cat << EOF > /home/net/cms/..user_audit.txt
 # For VDC devices, you may see a change in role when the checked in config is correct.  This indicates that
 # a device is not tagged in netbox as mgmt_VDC as it should be.
 #
+# IMPORTANT NOTE!
+# If you see a user account that should NOT be there or a hash that isn't one of the historical hash, 
+# that should be escalated!
+#
+# Validation:
+# run
+#
+# /home/net/ns-ansible-uwmadison/ansible/netbox-playbook.sh /home/net/ns-ansible-uwmadison/ansible/network-users.yml --limit 'device1:device2' --check
+#
+# where device1 and or device2 are the devices in the report, the --limit option is colon delineated
+#
+# To see what it's trying to change, you should also validate that it isn't a write mem bug for sn-* type.
+# When the audit runs in the morning it's looking at the credentials in the .conf file, NOT the device itself,
+# and the playbook is comparing that to variables that are set from devinfo. So if you see emerg or admin in this file,
+# it isn't necessarily a user that shouldn't be there, it could be a hash that need to be changed because that
+# device came online or was moved to and "active" or "staged" state in Netbox recently and has old creds 
+# (assuming they match one of our historical creds), you can check the change log in Netbox to verify that.
+#
+# To fix the device:
+# run
+# 
+# /home/net/ns-ansible-uwmadison/ansible/netbox-playbook.sh /home/net/ns-ansible-uwmadison/ansible/network-users.yml --limit 'device1:device2'
+#
+# https://kb.wisc.edu/ns/internal/146745 for more info
+# https://kb.wisc.edu/ns/internal/113380
 EOF
 #
 exec /home/net/ns-ansible-uwmadison/ansible/netbox-playbook.sh /home/net/ns-ansible-uwmadison/ansible/network-users.yml --limit 's-*:t-*:r-*:rn-*:sn-*' --check 2>/home/net/cms/..user_audit_err.txt | /bin/jq -r '.plays[].tasks[].hosts | to_entries | .[] | select(.value.changed and .value.results) | [.key, (.value.results[] | select(.commands) .commands | join("; ") | sub("\n"; "") ) ] | @csv' | /bin/sed -re 's/(password|secret) ?([0-9])? (\S+) ([^\"]+)"/\1 XXXXXXXXX"/g' >> /home/net/cms/..user_audit.txt

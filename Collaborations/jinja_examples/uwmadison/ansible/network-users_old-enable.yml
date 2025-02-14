@@ -33,10 +33,12 @@
     # net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency-' + inventory_hostname) | from_json }}"
     ansible_user: "{{ net_user.username }}"
     ansible_password: "{{ net_user.password }}"
-    ansible_become_password: "{{ old_enable_secret.password }}" ### old pswd here? yes
-    emergency_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency') | from_json }}"
-    enable_secret: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j enable') | from_json }}"
-    old_enable_secret: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j enable-old') | from_json }}"
+    ansible_become_password: "{{ old_enable_secret.password }}" ### set the ansible become password for privilege elevation 
+    emergency_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency') | from_json }}" #always current emergency
+    enable_secret: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j enable') | from_json }}" #always current enable
+    # line you want to edit based on what enable is on the device below
+    old_enable_secret: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j enable-23') | from_json }}"
+    # line you want to edit based on what enable is on the device above
     radius_secret: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j radius') | from_json }}"
     netbox_devinfo: "{{ lookup('pipe','/usr/local/ns/bin/devinfo -j netbox-prod') | from_json }}"
     netbox_api: "{{ netbox_devinfo.connection_method }}://{{ netbox_devinfo.attributes.host }}:{{ netbox_devinfo.attributes.port }}/"

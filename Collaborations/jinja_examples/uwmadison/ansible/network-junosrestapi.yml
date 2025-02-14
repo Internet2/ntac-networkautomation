@@ -1,26 +1,16 @@
 ---
 - name: JunOS REST API Enable
-  hosts: rj-*
+  hosts: rj-cssclabqa-*
   gather_facts: false
   # Ansible collection ansible.netcommon (latest) connection modules
   # connection: ansible.netcommon.network_cli
-  # connection: ansible.netcommon.netconf
-  # Ansible 2.9 built-in connection modules
-  # NB: only junos_command supports network_cli, junos_config and others require netconf
-  # connection: network_cli
-  connection: netconf
-  # FIXME: Is this necessary, not sure JunOS has an "enable" concept
-  # become: true
-  # become_method: enable
+  connection: ansible.netcommon.netconf
   vars:
     ansible_python_interpreter: /usr/bin/python3
     ansible_network_import_modules: true
     ansible_host_key_auto_add: true
     # Ansible collection junipernetworks.junos (latest) config modules
-    # ansible_network_os: junipernetworks.junos.junos
-    # Ansible 2.9 built-in junos config modules
-    ansible_network_os: "junos"
-
+    ansible_network_os: junipernetworks.junos.junos
     ansible_command_timeout: 300
     ansible_connect_timeout: 300
     # Auto-login using credentials from devinfo
@@ -33,31 +23,51 @@
     # device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+|n\\dk|n\\d\\d|securesync|sdx|pa|m-\\d+|cordex-cxc|aruba|ap-\\d|poweredge|avocent|equallogic|asr-\\d+|mx\\d+|ex\\d+|srx\\d+|VM)', '\\1') | first if device_types is defined else 'VM' }}"
     # device_type: "{{inventory_hostname.split('-')[0]}}"
     # device_ha: "{{ inventory_hostname.split('-')[5]}}"
+    __doc__: |
+      EXPERIMENTAL JunOS REST API for OpenNMS PoC
+
+      Demonstration of enabling REST API for OpenNMS PoC environment to gather
+      performance the same performance metrics as `ns-scraper` does with CLI and `jlogin`
+      using OpenNMS XmlCollector
+
+      NB: only junos_command supports network_cli, junos_config and others require netconf
+      which needs to be configured as the first step
+
+      FIXME: move variables from play-local to `hosts.yml` inventory file
   tasks:
     - name: enable netconf
       connection: network_cli
-      junos_netconf:
+      junipernetworks.junos.junos_netconf:
         # state: present
         # listen_on: 830
       notify: commit config
     - name: check if https cert is created
+      vars:
+        __doc__: |
+          NB: Using `network_cli` instead of `netconf` to run `show` command
+
+          `wait_for` only supports netconf and doesn't seem to work with this show command
+              so we register the output and check it in a when clause in the next task
       connection: network_cli
-      junos_command:
+      junipernetworks.junos.junos_command:
         commands: "show security pki local-certificate"
-        # NB: wait_for only supports netconf and doesn't seem to work with this show command
-        #     so we register the output and check it in a when clause in the next task
         # wait_for: "result[0] contains junos_rest_https_cert"
       register: show_cert
     - name: create https self-signed cert manually
-      # `when` clauses are an `if` statement and basically eval() a python/jinja2 expression
+      vars:
+        __doc__: |
+          `when` clauses are an `if` statement and basically eval() a python/jinja2 expression
+
+          FIXME: running command over netconf to use wait_for to check output hasn't been tested,
+             comment out the connection override and failed_when and uncomment wait_for to test.
+
+          I prefer to have automation fail if the state is not known and verified and punt
+          to an operator than proceed in an untested state, potentially causing errors
+
+          `failed_when` also evaluates and expression and provides custom failure detection
       when: "show_cert.stdout[0].find(junos_rest_https_cert) == -1"
-      # FIXME: running command over netconf to use wait_for to check output hasn't been tested,
-      #    comment out the connection override and failed_when and uncomment wait_for to test.
-      #
-      #    I prefer to have automation fail if the state is not known and verified and punt
-      #    to an operator than proceed in an untested state, potentially causing errors
       connection: network_cli
-      junos_command:
+      junipernetworks.junos.junos_command:
         commands:
           - "request security pki generate-key-pair type ecdsa size 384 certificate-id {{ junos_rest_https_cert }}"
           - 'request security pki local-certificate generate-self-signed certificate-id {{ junos_rest_https_cert }} subject CN={{ inventory_hostname }}.local.net.wisc.edu,OU=net,O=wisc,O=edu email "{{ default_mail_alias }}" domain-name local.net.wisc.edu ip-address {{ primary_ip4 }}'
@@ -65,24 +75,25 @@
         #   - "result[0] contains 'Generated key pair'"
         #   - "result[1] contains 'Self-signed certificate generated and loaded successfully'"
       register: create_cert
-      # failed_when also evaluates and expression and provides custom failure detection
       failed_when: "create_cert.stdout[0].find('Generated key pair') == -1 or create_cert.stdout[1].find('Self-signed certificate generated and loaded successfully') == -1"
     - name: Enable system service rest
-      junos_config:
+      vars:
+        __doc__: |
+          Setting `confirm` in minutes in `junos_config` and notifying handler to confirm the commit at the end
+
+          `notify` raises a flag for a handler to catch, handlers only run once
+           at the end no matter how many times they are flagged.  can be a list
+           of handlers to notify
+      junipernetworks.junos.junos_config:
         src: "network/base/junos_system_service_rest.j2"
         update: replace
-        # FIXME: verify what commit_check/confirm_commit actually do and what is the desired behavior
         # check_commit: true
         # confirm: minutes
         confirm: 5
         # comment: "ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
-      # `notify` raises a flag for a handler to catch, handlers only run once
-      #  at the end no matter how many times they are flagged.  can be a list
-      #  of handlers to notify
-      # notify: commit config
       notify: commit config
     - name: Add REST API ports to remote access firewall rules
-      junos_config:
+      junipernetworks.junos.junos_config:
         src: "network/base/junos_sync_fw-inet-remote-access.j2"
         update: replace
         # check_commit: true
@@ -91,18 +102,30 @@
       notify: commit config
   handlers:
     - name: commit config
-      junos_config:
-        # FIXME: verify what commit_check/confirm_commit actually do and what is the desired behavior
+      vars:
+        __doc__: "Confirm change made in previous `junos_config` task which uses `commit confirm 5`"
+      junipernetworks.junos.junos_config:
         confirm_commit: true
         comment: "ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
       ignore_errors: "{{ ansible_check_mode }}"
       notify: NetCMS Check-in
     - name: NetCMS Check-in
-      # you can have a list of `notify` flags, or have multipler handlers listen
-      # for the same flag, or have handlers notify other handlers to chain them,
-      # when handlers need to have more than one step.  I suppose a handler could
-      # also import a playbook or use the `block` module to have multiple tasks.
-      # listen: "commit config"
+      vars:
+        __doc__: |
+          you can have a list of `notify` flags, or have multipler handlers listen
+          for the same flag, or have handlers notify other handlers to chain them,
+          when handlers need to have more than one step.  I suppose a handler could
+          also import a playbook or use the `block` module to have multiple tasks.
+          eg. `listen: "commit config"`
+
+          task modules are ususally run against the target host `inventory_hostname`
+          but can be delegated to other hosts, eg enabling a service on one host may
+          need to push a command to the load balancer on another host, or in this
+          case we run the CMS check-in command on the ansible control node (ie where
+          we are running the playbook from).
+
+          we use `failed_when` here to check the output text for `WARN` and not just for a non-zero exit code
+
       command:
         argv:
           - "/usr/bin/make"
@@ -110,12 +133,6 @@
           - "/home/net/cms/Makefile"
           - "logmsg=ansible configuration {{ ansible_play_name }} by {{ lookup('env', 'LOGNAME') }}"
           - "/home/net/cms/{{ inventory_hostname }}.update"
-      # task modules are ususally run against the target host `inventory_hostname`
-      # but can be delegated to other hosts, eg enabling a service on one host may
-      # need to push a command to the load balancer on another host, or in this
-      # case we run a command on the ansible control node (ie where we are running
-      # the playbook from).
       delegate_to: localhost
       register: netcms_make_update
-      # we use failed_when here because I check the output text and not just for a non-zero exit code
       failed_when: "'WARN' in netcms_make_update.stdout"

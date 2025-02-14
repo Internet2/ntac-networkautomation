@@ -4,7 +4,7 @@
   hosts: s-*:r-*:t-*:VG-*
   gather_facts: false
   connection: ansible.netcommon.network_cli
-  become:  "{{ 'False' if ansible_check_mode else 'True' }}"
+  become: "{{ 'False' if ansible_check_mode else 'True' }}"
   become_method: ansible.netcommon.enable
   vars:
     ansible_network_import_modules: true
@@ -27,6 +27,10 @@
     netbox_token: "{{ netbox_devinfo.password }}"
     platform_family: "{{ platforms[0].split('-')[0] }}"
     device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+)', '\\1') | first }}"
+    __doc__: |
+      Ensure LLDP is enabled to assist in automated link connection detection
+
+      FIXME: move variables from play-local to `hosts.yml` inventory file
   tasks:
     - name: Set ansible_net_config
       block:
@@ -101,6 +105,10 @@
     ansible_password: "{{ net_user.password }}"
     ansible_become_password: "{{ net_user.enable_password }}"
     # emergency_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency') | from_json }}"
+    __doc__: |
+      Ensure LLDP is enabled to assist in automated link connection detection
+
+      FIXME: move variables from play-local to `hosts.yml` inventory file
   tasks:
     # - name: Get Facts
     #   nxos_facts:

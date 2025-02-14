@@ -1,15 +1,13 @@
 ---
 - name: C9300X Stack Speed High
   # NB: for testing just limit to one host
-  #hosts: s-cssclabqa-*:&device_types_c9300x_48hx
+  # hosts: s-cssclabqa-*:&device_types_c9300x_48hx
   hosts: s-*:r-*:&device_types_c9300x_48hx
   gather_facts: false
   # Ansible collection ansible.netcommon
-  # connection: ansible.netcommon.network_cli
-  # Ansible 2.9 built-in
-  connection: network_cli
-  become: yes
-  become_method: enable
+  connection: ansible.netcommon.network_cli
+  become: true
+  become_method: ansible.netcommon.enable
   vars:
     ansible_python_interpreter: /usr/bin/python3
     ansible_network_import_modules: true
@@ -17,10 +15,8 @@
     # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
     # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
     # Ansible collection ansible.netcommon and cisco.ios
-    # ansible_network_os: "cisco.ios.ios"
+    ansible_network_os: "cisco.ios.ios"
     # ansible_network_cli_ssh_type: libssh
-    # Ansible 2.9 built-in
-    ansible_network_os: "ios"
     ansible_command_timeout: 300
     ansible_connect_timeout: 300
     net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
@@ -34,6 +30,46 @@
     platform_family: "{{ platforms[0].split('-')[0] }}"
 #    ansible_net_model: "{{ ??? set via ios_facts  }}"
     device_family: "{{ device_types[0] | regex_search('^(ap\\d\\d\\d|ws-c\\d+|c9\\d+x?)', '\\1') | first }}"
+    __doc__: |
+      Run `switch stack-speed high` command on C9300X switches to enable full speed
+      as they default to a slower speed to support mixed C9300 stacks.
+
+      FIXME: many play-specific variables can be migrated to general `hosts.yml` to reduce duplication
+
+
+      ### Example Ansible Inventory
+      ```yaml
+      all:
+        vars:
+          ansible_network_import_modules: true
+          ansible_host_key_auto_add: true
+          ansible_host_key_checking: false
+          net_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j ' + inventory_hostname) | from_json }}"
+          emergency_user: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j emergency') | from_json }}"
+
+        children:
+          ios_17:
+            children:
+              # Inherited from Netbox inventory Device record Platform field.
+              platforms_iosxe_bengaluru_17_06_03:
+              platforms_iosxe_bengaluru_17_06_05:
+              platforms_iosxe_17_6_5:
+              platforms_iosxe_cupertino_17_09_03:
+              platforms_iosxe_dublin_17_12_02:
+              platforms_iosxe_dublin_17_12_03:
+            vars:
+              # ansible_private_key_file: "/home/net/.ssh/id_rsa.pub"
+              # ansible_net_ssh_keyfile: "/home/net/.ssh/id_rsa.pub"
+              # Ansible collection ansible.netcommon and cisco.ios
+              ansible_network_os: "cisco.ios.ios"
+              # ansible_network_cli_ssh_type: libssh
+              # ansible_network_cli_ssh_type: paramiko
+              ansible_command_timeout: 300
+              ansible_connect_timeout: 300
+              ansible_user: "{{ net_user.username }}"
+              ansible_password: "{{ net_user.password }}"
+              ansible_become_password: "{{ net_user.enable_password }}"
+      ```
   tasks:
     # - name: Get Facts
     #   ios_facts:
@@ -42,7 +78,7 @@
       set_fact:
         ansible_net_config: "{{ lookup('pipe', '/usr/bin/co -q -p /home/net/cms/' + inventory_hostname + '.conf') }}"
     - name: Set Stack-Speed High
-      ios_config:
+      cisco.ios.ios_config:
         running_config: "{{ ansible_net_config }}"
         lines:
           - "switch stack-speed high"
@@ -50,7 +86,7 @@
       notify: "copy running-config startup-config"
   handlers:
     - name: copy running-config startup-config
-      ios_command:
+      cisco.ios.ios_command:
         commands:
           - "write memory"
         wait_for: "result[0] contains '[OK]'"

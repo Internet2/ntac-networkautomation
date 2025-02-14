@@ -8,7 +8,26 @@
     ansible_python_interpreter: /usr/bin/python3
     opennms_devinfo: "{{ lookup('pipe', '/usr/local/ns/bin/devinfo -j opennms-qa') | from_json }}"
     opennms_api: "{{ opennms_devinfo.connection_method + '://' + opennms_devinfo.attributes.host + ':' + opennms_devinfo.attributes.port + '/opennms/rest' }}"
+    __doc__: |
+      Create large number of dummy test hosts for OpenNMS PoC
 
+      Make a range of OpenNMS Node records that have the same ip-addr
+      as a ping target, so we can validate performance of large numbers
+      of alarm events happening in a short time frame, simulating a large
+      network outage or partition from the monitoring system network.
+
+      Enable HTTP-APITest service to check performance of polling when
+      a large number of TCP services timeout, does it fill up queues/threads
+      and create performance problems for the rest of the monitoring?
+
+      Edit the range in the loop to change the number of nodes created
+
+      NB: requisitions responds with 202 Accepted when adding new nodes
+
+      Using the `uri` module with `force_basic_auth: true` so we don't
+      waste resources following the HTTP 401 with a second request with credentials.
+
+      Delete the `Test` requisition when finished testing
   tasks:
     - name: Provision Test Requisitoin
       loop: "{{ range(1, 129) | list }}"
@@ -17,13 +36,13 @@
         url: "{{ opennms_api }}/requisitions/Test/nodes"
         headers:
           Accept: "application/json"
-        # NB: requisitions responds with 202 Accepted when adding new nodes
+
         status_code:
           - 200
           - 201
           - 202
         # Don't require two requests for each request (401 then 202)
-        force_basic_auth: True
+        force_basic_auth: true
         url_username: "{{ opennms_devinfo.username }}"
         url_password: "{{ opennms_devinfo.password }}"
         body_format: json
