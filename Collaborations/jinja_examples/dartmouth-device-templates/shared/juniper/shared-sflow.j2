@@ -1,0 +1,25 @@
+{% if 'sflow' in config['device-tags'] %}
+protocols {
+    sflow {
+        polling-interval 10;
+        sample-rate {
+            ingress 1000;
+            egress 1000;
+        }
+        agent-id {{ config['mgmt_ip']['ip'] }};
+        source-ip {{ config['mgmt_ip']['ip'] }};
+        collector {{ config['sflow_collector']['ip'] }} {
+            udp-port {{ config['sflow_collector']['port'] }};
+        }
+        {% for interface in config['interfaces'] %}
+          {% if 'enabled' in interface and interface['enabled'] and ( (not 'link_peer' in interface) or ('link_peer' in interface and interface['link_peer']['device_role'] not in ["Collapsed-Core", "Core"]) ) and ( not 'irb' in interface['name'] and not 'ae' in interface['name'] and not 'lo0' in interface['name'] ) %}
+        interfaces {{ interface['name'] }};
+          {% endif %}
+        {% endfor %}
+    }
+}
+routing-options static {
+    route {{ config['sflow_collector']['ip'] }}/32 next-table mgmt_junos.inet.0;
+}
+{% endif %}
+

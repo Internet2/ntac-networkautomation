@@ -1,0 +1,6 @@
+            family inet {
+                filter {
+                    input mgmt-traffic;
+                }
+                address {{ mgmt_ip['ip'] }}/{{ mgmt_ip['mask'] }};
+            }

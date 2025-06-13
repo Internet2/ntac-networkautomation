@@ -1,0 +1,118 @@
+policy-options {
+    prefix-list default-ipv4-prefixes {
+{% for prefix in config['bgp']['default_ipv4_filter'] %}
+        {{ prefix }};
+{% endfor %}
+    }
+    prefix-list default-ipv6-prefixes {
+{% for prefix in config['bgp']['default_ipv6_filter'] %}
+        {{ prefix }};
+{% endfor %}
+    }
+{% for vrf in config['vrfs'] %}
+  {% if vrf['rd'] %}
+    {% if vrf['ipv4_routed_prefixes'] %}
+    prefix-list {{ vrf['name'] }}-ipv4-routed-prefixes {
+      {% for prefix in vrf['ipv4_routed_prefixes'] %}
+        {{ prefix }};
+      {% endfor %}
+      {% if vrf['strict_filtering'] == False %}
+        {% for prefix in config['bgp']['default_ipv4_filter'] %}
+        {{ prefix }};
+        {% endfor %}
+      {% endif %}
+    }
+    {% endif %}
+    {% if vrf['ipv4_other_prefixes'] %}
+    prefix-list {{ vrf['name'] }}-ipv4-other-prefixes {
+      {% for prefix in vrf['ipv4_other_prefixes'] %}
+        {{ prefix }};
+      {% endfor %}
+      {% if vrf['strict_filtering'] == False %}
+        {% for prefix in config['bgp']['default_ipv4_filter'] %}
+        {{ prefix }};
+        {% endfor %}
+      {% endif %}
+    }
+    {% endif %}
+    {% if vrf['ipv4_filtered_prefixes'] %}
+      {% for filter in vrf['ipv4_filtered_prefixes'] %}
+    prefix-list {{ vrf['name'] }}-ipv4-filtered-prefixes-{{ filter }} {
+        {% for prefix in vrf['ipv4_filtered_prefixes'][filter] %}
+        {{ prefix }};
+        {% endfor %}
+    }
+      {% endfor %}
+    {% endif %}
+    {% if vrf['ipv6_routed_prefixes'] %}
+    prefix-list {{ vrf['name'] }}-ipv6-routed-prefixes {
+      {% for prefix in vrf['ipv6_routed_prefixes'] %}
+        {{ prefix }};
+      {% endfor %}
+      {% if vrf['strict_filtering'] == False %}
+        {% for prefix in config['bgp']['default_ipv6_filter'] %}
+        {{ prefix }};
+        {% endfor %}
+      {% endif %}
+    }
+    {% endif %}
+    {% if vrf['ipv6_other_prefixes'] %}
+    prefix-list {{ vrf['name'] }}-ipv6-other-prefixes {
+      {% for prefix in vrf['ipv6_other_prefixes'] %}
+        {{ prefix }};
+      {% endfor %}
+      {% if vrf['strict_filtering'] == False %}
+        {% for prefix in config['bgp']['default_ipv6_filter'] %}
+        {{ prefix }};
+        {% endfor %}
+      {% endif %}
+    }
+    {% endif %}
+    {% if vrf['ipv6_filtered_prefixes'] %}
+      {% for prefix_filter in vrf['ipv6_filtered_prefixes'] %}
+    prefix-list {{ vrf['name'] }}-ipv6-{{ prefix_filter }} {
+         {% for prefix in vrf['ipv6_filtered_prefixes'][prefix_filter] %}
+        {{ prefix }};
+         {% endfor %}
+    }
+      {% endfor %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+    prefix-list leaked-ipv4-routed-prefixes {
+{% for vrf in config['vrfs'] %}
+  {% if vrf['leak_vrf'] %}
+    {% for prefix in vrf['ipv4_routed_prefixes'] %}
+        {{ prefix }};
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+    }
+    prefix-list leaked-ipv4-other-prefixes {
+{% for vrf in config['vrfs'] %}
+  {% if vrf['leak_vrf'] %}
+    {% for prefix in vrf['ipv4_other_prefixes'] %}
+        {{ prefix }};
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+    }
+    prefix-list leaked-ipv6-routed-prefixes {
+{% for vrf in config['vrfs'] %}
+  {% if vrf['leak_vrf'] %}
+    {% for prefix in vrf['ipv6_routed_prefixes'] %}
+        {{ prefix }};
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+    }
+    prefix-list leaked-ipv6-other-prefixes {
+{% for vrf in config['vrfs'] %}
+  {% if vrf['leak_vrf'] %}
+    {% for prefix in vrf['ipv6_other_prefixes'] %}
+        {{ prefix }};
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+    }
+}

@@ -30,7 +30,7 @@ interfaces {
 {% for interface in config['interfaces'] %}
 {% if 'lacp_interfaces' not in config or interface['name'] not in config['lacp_interfaces'] %}
 {% if ':' in interface['name'] and 'xe-' in interface['name'] %}
-{% if 'QFX5110-48S-4C' in config['device_platform'] %}
+{% if 'QFX5110-48S-4C' in config['vendor_model'] %}
 chassis {
     fpc {{ interface['name'] | regex_replace('^[a-z]*\-(?P<fpc>\\d+)/(?P<pic>\\d+)/(?P<port>\\d+):(?P<channel>\\d+)', '\\g<fpc>') }} {
         pic {{ interface['name'] | regex_replace('^[a-z]*\-(?P<fpc>\\d+)/(?P<pic>\\d+)/(?P<port>\\d+):(?P<channel>\\d+)', '\\g<pic>') }} {

@@ -1,0 +1,140 @@
+policy-options {
+    policy-statement {{ config['transit_vrf'] }}-vrf-from-{{ config['transit_vrf'] }} {
+        term import-networks {
+            from {
+    {% for t_vrf in config['vrfs'] %}
+      {% if 'default_receive' in t_vrf and t_vrf['default_receive'] %}
+        {% if 'ipv4_routed_prefixes' in t_vrf and t_vrf['ipv4_routed_prefixes'] %}
+                prefix-list-filter {{ t_vrf['name'] }}-ipv4-routed-prefixes exact;
+        {% endif %}
+        {% if 'ipv4_other_prefixes' in t_vrf and t_vrf['ipv4_other_prefixes'] %}
+                prefix-list-filter {{ t_vrf['name'] }}-ipv4-other-prefixes orlonger;
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+            }
+            then accept;
+        }
+    {#    add any needed route filters in addition to the default route  THE_FIX    #}
+    {% for vrf in config['vrfs'] %}
+      {% if vrf['name'] == peer['vrf'] and 'tags' in vrf and vrf['tags'] %}
+        {% for this_tag in vrf['tags'] %}
+          {% for t_vrf in config['vrfs'] %}
+            {% if 'ipv4_filtered_prefixes' in t_vrf and t_vrf['ipv4_filtered_prefixes'] %}
+              {% if this_tag in t_vrf['ipv4_filtered_prefixes'] and t_vrf['ipv4_filtered_prefixes'][this_tag] %}
+        term import-tags-{{ t_vrf['name'] }}-{{ this_tag }} {
+            from {
+                prefix-list-filter {{ t_vrf['name'] }}-ipv4-filtered-prefixes-{{ this_tag }} orlonger;
+            }
+            then accept;
+        }
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+    {#    end of route filters   #}
+        term default-deny {
+            then reject;
+        }
+    }
+    policy-statement {{ config['transit_vrf'] }}-vrf-from-{{ config['transit_vrf'] }}-ipv6 {
+        term import-networks {
+            from {
+    {% for t_vrf in config['vrfs'] %}
+      {% if 'default_receive' in t_vrf and t_vrf['default_receive'] %}
+        {% if 'ipv6_routed_prefixes' in t_vrf and t_vrf['ipv6_routed_prefixes'] %}
+                prefix-list-filter {{ t_vrf['name'] }}-ipv6-routed-prefixes exact;
+        {% endif %}
+        {% if 'ipv6_other_prefixes' in t_vrf and t_vrf['ipv6_other_prefixes'] %}
+                prefix-list-filter {{ t_vrf['name'] }}-ipv6-other-prefixes orlonger;
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+            }
+            then accept;
+        }
+    {#    add any needed route filters in addition to the default route    #}
+    {% for vrf in config['vrfs'] %}
+      {% if vrf['name'] == peer['vrf'] and 'tags' in vrf and vrf['tags'] %}
+        {% for this_tag in vrf['tags'] %}
+          {% for t_vrf in config['vrfs'] %}
+            {% if 'ipv6_filtered_prefixes' in t_vrf and t_vrf['ipv6_filtered_prefixes'] %}
+              {% if this_tag in t_vrf['ipv6_filtered_prefixes'] and t_vrf['ipv6_filtered_prefixes'][this_tag] %}
+        term import-tags-{{ t_vrf['name'] }}-{{ this_tag }} {
+            from {
+                prefix-list-filter {{ t_vrf['name'] }}-ipv6-filtered-prefixes-{{ this_tag }} orlonger;
+            }
+            then accept;
+        }
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+    {#    end of route filters   #}
+        term default-deny {
+            then reject;
+        }
+    }
+    policy-statement {{ config['transit_vrf'] }}-vrf-to-{{ config['transit_vrf'] }} {
+    {% for t_vrf in config['vrfs'] %}
+      {% if t_vrf['name'] == config['transit_vrf'] and 'tags' in t_vrf and t_vrf['tags'] %}
+        {% for this_tag in t_vrf['tags'] %}
+          {% for temp_vrf in config['vrfs'] %}
+            {% if 'ipv4_filtered_prefixes' in temp_vrf and temp_vrf['ipv4_filtered_prefixes'] %}
+              {% if this_tag in temp_vrf['ipv4_filtered_prefixes'] and temp_vrf['ipv4_filtered_prefixes'][this_tag] %}
+        term import-tags-{{ temp_vrf['name'] }}-{{ this_tag }} {
+            from {
+                prefix-list-filter {{ temp_vrf['name'] }}-ipv4-filtered-prefixes-{{ this_tag }} orlonger;
+            }
+            then accept;
+        }
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+        term import-default {
+            from {
+                route-filter 0.0.0.0/0 exact;
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+    policy-statement {{ config['transit_vrf'] }}-vrf-to-{{ config['transit_vrf'] }}-ipv6 {
+    {% for t_vrf in config['vrfs'] %}
+      {% if t_vrf['name'] == config['transit_vrf'] and 'tags' in t_vrf and t_vrf['tags'] %}
+        {% for this_tag in t_vrf['tags'] %}
+          {% for temp_vrf in config['vrfs'] %}
+            {% if 'ipv6_filtered_prefixes' in temp_vrf and temp_vrf['ipv6_filtered_prefixes'] %}
+              {% if this_tag in temp_vrf['ipv6_filtered_prefixes'] and temp_vrf['ipv6_filtered_prefixes'][this_tag] %}
+        term import-tags-{{ temp_vrf['name'] }}-{{ this_tag }} {
+            from {
+                prefix-list-filter {{ temp_vrf['name'] }}-ipv6-filtered-prefixes-{{ this_tag }} orlonger;
+            }
+            then accept;
+        }
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      {% endif %}
+    {% endfor %}
+        term import-default {
+            from {
+                route-filter ::/0 exact;
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+}

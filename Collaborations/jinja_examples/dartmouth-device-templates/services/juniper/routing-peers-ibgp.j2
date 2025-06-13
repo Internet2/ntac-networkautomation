@@ -1,0 +1,58 @@
+routing-instances {                     
+    {{ config['transit_vrf'] }} {
+        protocols {
+            bgp {
+  {% if '::' in neighbor['ip'] %}
+                group ibgp-ipv6 {
+                    type internal;
+                    mtu-discovery;
+                    family inet6 {
+                        unicast;
+                        flow;
+                    }
+                    export send-direct;
+                    bfd-liveness-detection {
+                        minimum-interval 350;
+                        multiplier 3;
+                        session-mode single-hop;
+                    }
+                    neighbor {{ neighbor['ip'] }} {
+                        description "{{ neighbor['name'] }}";
+                        peer-as {{ config['bgp']['overlay_asn'] }}.{{ config['rds'][ config['transit_vrf'] ] }};
+                        export vrf-ibgp;
+                    {% for auth_peer in config['bgp']['auth'] %}
+                      {% if auth_peer['ip'] == neighbor['ip'] %}
+                        authentication-key "{{ auth_peer['key'] }}";
+                      {% endif %}
+                    {% endfor %}
+                    }                   
+                }                       
+  {% else %}
+                group ibgp {
+                    type internal;
+                    mtu-discovery;
+                    family inet {
+                        unicast;
+                    }
+                    export send-direct;
+                    bfd-liveness-detection {
+                        minimum-interval 350;
+                        multiplier 3;
+                        session-mode single-hop;
+                    }
+                    neighbor {{ neighbor['ip'] }} {
+                        description "{{ neighbor['name'] }}";
+                        peer-as {{ config['bgp']['overlay_asn'] }}.{{ config['rds'][ config['transit_vrf'] ] }};
+                        export vrf-ibgp;
+                    {% for auth_peer in config['bgp']['auth'] %}
+                      {% if auth_peer['ip'] == neighbor['ip'] %}
+                        authentication-key "{{ auth_peer['key'] }}";
+                      {% endif %}
+                    {% endfor %}
+                    }                   
+                }                       
+  {% endif %}
+            }                           
+        }                               
+    }                                   
+}

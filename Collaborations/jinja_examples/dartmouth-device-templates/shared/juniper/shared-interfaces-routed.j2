@@ -1,0 +1,33 @@
+            {% if 'native_vlan' in interface and interface['native_vlan'] != None and not 'subinterface' in interface and not 'no_evpn' in interface and 'gw_mac' in interface and interface['gw_mac'] %}
+            mac {{ interface['gw_mac'] }};
+            {% endif %}
+            {% if ('ipv4' in interface and interface['ipv4']|length) or (interface['routed'] and 'gateway' in interface and interface['gateway']|length) %}
+            family inet {
+                {% if ifname.startswith('lo0') %}
+                filter {
+                    input mgmt-traffic;
+                }
+                {% endif %}
+                {% include 'shared-interfaces-interface-ipv4-acls.j2' %}
+                {% if 'gateway' in interface and interface['gateway'] != None and interface['gateway']|length %}
+                address {{ interface['gateway'] }};
+                {% else %}
+                   {% for ip in interface['ipv4'] %}
+                address {{ ip }};
+                   {% endfor %}
+                {% endif %}
+            }
+            {% endif %}
+            {% if ('ipv6' in interface and interface['ipv6']|length) or (interface['routed'] and 'gateway_ipv6' in interface and interface['gateway_ipv6']|length) %}
+            family inet6 {
+                {% include 'shared-interfaces-interface-ipv6-acls.j2' %}
+                {% if 'gateway_ipv6' in interface and interface['gateway_ipv6'] != None and interface['gateway_ipv6']|length %}
+                address {{ interface['gateway_ipv6'] }};
+                {% else %}
+                    {% for ip in interface['ipv6'] %}
+                address {{ ip }};
+                    {% endfor %}
+                {% endif %}
+            }
+            {% endif %}
+

@@ -7,7 +7,11 @@ system {
     }
     name-server {
         {% for server in config['dns']['servers'] %}
+          {% if config['device_role'] in ["Collapsed-Core", "Core", "Distribution", "Services", "WAN"] %}
+        {{ server }} routing-instance mgmt_junos;
+          {% else %}
         {{ server }};
+          {% endif %}
         {% endfor %}
     }
     login {
@@ -40,7 +44,10 @@ system {
         ssh {
             root-login deny;
             protocol-version v2;
+            {% if 'device_platform' in config and config['device_platform'] and ('Junos 22' in config['device_platform'] or 'Junos 23' in config['device_platform']) %}
+            {% else %}
             no-tcp-forwarding;
+            {% endif %}
             client-alive-count-max 3;
             client-alive-interval 15;
             hostkey-algorithm {
@@ -67,6 +74,9 @@ system {
             {% endif %}
             log-prefix {{ config["hostname"]|replace(config['dns']['network-device-domainname'], "") }};
             source-address {{ config['mgmt_ip']['ip'] }};
+            {% if config['device_role'] in ["Collapsed-Core", "Core", "Distribution", "Services", "WAN"] %}
+            routing-instance mgmt_junos;
+            {% endif %}
             structured-data;
             match "!(.*{{ config['syslog']['messages_ignore']|join('.*|.*') }}.*)";
         }
@@ -90,7 +100,7 @@ system {
         {% endfor %}
         {% endif %}
     }
-    {% if 'EX4300' in config['vendor_model'] or 'EX4300' in config['device_platform'] or 'QFX' in config['vendor_model'] or 'QFX' in config['device_platform'] %}
+    {% if 'EX4300' in config['vendor_model'] or ('QFX' in config['vendor_model'] and not config['device_role'] in ["WAN"]) %}
     ddos-protection {
         global {
             disable-fpc;
@@ -99,9 +109,17 @@ system {
     {% endif %}
     ntp {
         {% for server in config['ntp']['servers'] %}
+        {% if config['device_role'] in ["Collapsed-Core", "Core", "Distribution", "Services", "WAN"] %}
+        server {{ server }} routing-instance mgmt_junos;
+        {% else %}
         server {{ server }};
+        {% endif %}
         {% endfor %}
+        {% if config['device_role'] in ["Collapsed-Core", "Core", "Distribution", "Services", "WAN"] %}
+        source-address {{ config['mgmt_ip']['ip'] }} routing-instance mgmt_junos;
+        {% else %}
         source-address {{ config['mgmt_ip']['ip'] }};
+        {% endif %}
     }
 }
 forwarding-options {
@@ -109,84 +127,8 @@ forwarding-options {
         all;
     }
 }
-    {% set mgmt_ip = config['mgmt_ip'] %}
-    {% if 'vlan' in mgmt_ip %}
-    {% if mgmt_ip['vlan'] not in config['routed-vlans'] %}
-interfaces {
-    irb.{{ mgmt_ip['vlan'] }} {
-        family inet {
-            address {{ mgmt_ip['ip'] }}/{{ mgmt_ip['mask'] }};
-        }
-    }
-}
-    {% endif %}
-    {% endif %}
-    {% if 'oob-fiber' in mgmt_ip %}
-    {% if 'virtual_chassis' in config %}
-interfaces {
-    vme {
-    {% else %}
-    em1 {
-    {% endif %}
-        unit 0 {
-            family inet {
-                address {{ mgmt_ip['ip'] }}/{{ mgmt_ip['mask'] }};
-            }
-        }
-    }
-}
-    {% elif 'oob' in mgmt_ip %}
-    {% if 'virtual_chassis' in config %}
-interfaces {
-    vme {
-    {% else %}
-    em0 {
-    {% endif %}
-        unit 0 {
-            family inet {
-                address {{ mgmt_ip['ip'] }}/{{ mgmt_ip['mask'] }};
-            }
-        }
-    }
-}
-    {% endif %}
-    {% if 'physical' in mgmt_ip %}
-interfaces {
-    {{ mgmt_ip['physical'] }} {
-        unit 0 {
-            family inet {
-                address {{ mgmt_ip['ip'] }}/{{ mgmt_ip['mask'] }};
-            }
-        }
-    }
-}
-    {% endif %}
-routing-options {
-    static {
-        route 0.0.0.0/0 next-hop {{ config['mgmt_ip']['default_gateway'] }};
-    }
-}
-    {% if 'oob' in mgmt_ip or 'oob-fiber' in mgmt_ip %}
-    {% if 'virtual_chassis' in config %}
-    {% else %}
-routing-instances {
-    mgmt_junos {
-        routing-options {
-            static {
-                route 0.0.0.0/0 next-hop {{ config['mgmt_ip']['default_gateway'] }};
-            }
-        }
-    }
-}
-    {% endif %}
-    {% endif %}
-{% if 'vlan' in mgmt_ip %}
-vlans {
-    {% for vlan in config['vlans'] %}{% if vlan['vid'] == mgmt_ip['vlan'] %}
-    {{ vlan['name'] }}{% endif %}{% endfor %} {
-        l3-interface irb.{{ mgmt_ip['vlan'] }};
-    }
-}
+{% if config['device_role'] not in ["Collapsed-Core", "Core", "Distribution", "Services", "WAN"] %}
+{% include 'shared-system-mgmt-int.j2' %}
 {% endif %}
 protocols {
     lldp {
@@ -197,5 +139,18 @@ protocols {
     lldp-med {
         interface all;
     }
-
+    {% if config['device_role'] in ["Collapsed-Core", "Distribution"] %}
+    igmp-snooping {
+        vlan default;
+        {% for autoirb in config['autoirbs'] %}
+        {% if 'igmpsnooping' in autoirb and autoirb['igmpsnooping'] == True %}
+        vlan {{ autoirb['native_vlan'] }} {
+            l2-querier {
+                source-address {{ autoirb['gateway'].split('/')[0] }};
+            }
+        }
+        {% endif %}
+        {% endfor %}
+    }
+    {% endif %}
 }

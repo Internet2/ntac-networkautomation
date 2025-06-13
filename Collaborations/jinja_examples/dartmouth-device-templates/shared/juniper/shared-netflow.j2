@@ -1,0 +1,76 @@
+{% if 'netflow' in config['device-tags'] %}
+chassis {
+    fpc 0 {
+        sampling-instance netflow-instance;
+    }
+}
+services {
+    flow-monitoring {
+        version9 {
+            template netflow {
+                flow-active-timeout 60;
+                flow-inactive-timeout 15;
+                ipv4-template;
+            }
+        }
+    }
+}
+forwarding-options {
+    sampling {
+        instance {
+            netflow-instance {
+                input {
+                    rate 1000;
+                    run-length 0;
+                }
+                family inet {
+                    output {
+                        flow-server {{ config['netflow_collector']['ip'] }} {
+                            port {{ config['netflow_collector']['port'] }};
+                            version9 {
+                                template {
+                                    netflow;
+                                }
+                            }
+                        }
+                        inline-jflow {
+                            source-address {{ config['mgmt_ip']['ip'] }};
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+firewall {
+    filter netflow-filter {
+        term allow-any {
+            then {
+                sample;
+                accept;
+            }
+        }
+    }
+}
+
+{% for interface in config['interfaces'] %}
+  {% if 'enabled' in interface and interface['enabled'] and ('netflow' in interface and interface['netflow']) and ( (not 'link_peer' in interface) or ('link_peer' in interface and interface['link_peer']['device_role'] not in ["Collapsed-Core", "Core"]) ) and ( not 'lo0' in interface['name'] ) %}
+interfaces {
+    {{ interface['name'].split('.')[0] }} {
+        unit {{ interface['name'].split('.')[-1] if '.' in interface['name'] else '0' }} {
+            family inet {
+                filter {
+                    input netflow-filter;
+                    output netflow-filter;
+                }
+            }
+        }
+    }
+}
+  {% endif %}
+{% endfor %}
+routing-options static {
+    route {{ config['netflow_collector']['ip'] }}/32 next-table mgmt_junos.inet.0;
+}
+{% endif %}
+

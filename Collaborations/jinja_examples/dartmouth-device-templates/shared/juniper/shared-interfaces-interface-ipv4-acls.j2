@@ -1,0 +1,11 @@
+                {% if ('acl_in_ipv4' in interface and interface['acl_in_ipv4']) or ('acl_out_ipv4' in interface and interface['acl_out_ipv4']) %}
+                filter {
+                    {% if 'acl_in_ipv4' in interface and interface['acl_in_ipv4'] %}
+                    input {{ interface['name'] }}_acl_in_ipv4;
+                    {% endif %}
+                    {% if 'acl_out_ipv4' in interface and interface['acl_out_ipv4'] %}
+                    output {{ interface['name'] }}_acl_out_ipv4;
+                    {% endif %}
+                }
+                {% endif %}
+

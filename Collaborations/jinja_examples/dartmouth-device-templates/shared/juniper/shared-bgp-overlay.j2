@@ -1,0 +1,44 @@
+protocols {
+    bgp {
+        group overlay {
+            type internal;
+            mtu-discovery;
+            vpn-apply-export;
+            local-address {{ config['router_id'] }};
+            local-as {{ config['bgp']['overlay_asn'] }} loops 2;
+            multipath;
+            family evpn {
+                signaling;
+            }
+            {% if (config['device_role'] in ['Collapsed-Core', 'Core']) %}
+            {# {% if (config['device_role'] in ['Core']) %} #}
+            cluster {{ config['bgp']['rr_cluster_id'] }};
+            {% endif %}
+            authentication-key-chain bgp-peers;
+            {% for peer in config['bgp']['overlay_peers'] %}
+            neighbor {{ peer['ip'] }} {
+                description "{{ peer['name'] }}";
+                {% if 'in_maintenance_mode' in config and config['in_maintenance_mode'] %}
+                shutdown;
+                {% endif %}
+            }
+            {% endfor %}
+        }
+    }
+}
+policy-options {
+    policy-statement load-balance-per-flow {
+        then {
+            load-balance per-packet;
+        }
+    }
+}
+routing-options {
+    router-id {{ config['router_id'] }};
+    autonomous-system {{ config['bgp']['overlay_asn'] }} loops 2 asdot-notation;
+    forwarding-table {
+        export load-balance-per-flow;
+        ecmp-fast-reroute;
+    }
+}
+

@@ -1,0 +1,157 @@
+policy-options {
+    policy-statement {{ config['transit_vrf'] }}-vrf-from-border {
+  {% for vrf in config['vrfs'] %}
+    {% if vrf['name'] == config['transit_vrf'] %}
+    {#    add any needed route filters in addition to the default route    #}
+      {% if 'tags' in vrf and vrf['tags'] %}
+        {% for this_tag in vrf['tags'] %}
+          {% for t_vrf in config['vrfs'] %}
+            {% if 'ipv4_filtered_prefixes' in t_vrf and t_vrf['ipv4_filtered_prefixes'] %}
+              {% if this_tag in t_vrf['ipv4_filtered_prefixes'] and t_vrf['ipv4_filtered_prefixes'][this_tag] %}
+        term import-tags-{{ t_vrf['name'] }}-{{ this_tag }} {
+            from {
+                protocol bgp;
+                prefix-list-filter {{ t_vrf['name'] }}-ipv4-filtered-prefixes-{{ this_tag }} orlonger;
+            }
+            then accept;
+        }
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      {% endif %}
+    {#    end of route filters   #}
+    {% endif %}
+  {% endfor %}
+  {% for vrf in config['vrfs'] %}
+    {% if vrf['name'] == config['transit_vrf'] %}
+    {#    add any border-announced routes in addition to the default route    #}
+            {% if 'ipv4_filtered_prefixes' in vrf and vrf['ipv4_filtered_prefixes'] %}
+              {% if 'announce_network' in vrf['ipv4_filtered_prefixes'] and vrf['ipv4_filtered_prefixes']['announce_network'] %}
+        term import-tags-{{ vrf['name'] }}-announce_network {
+            from {
+                protocol bgp;
+                prefix-list-filter {{ vrf['name'] }}-ipv4-filtered-prefixes-announce_network exact;
+            }
+            then accept;
+        }
+              {% endif %}
+            {% endif %}
+    {#    end of route filters   #}
+    {% endif %}
+  {% endfor %}
+        term import-default {
+            from {
+                protocol bgp;
+                route-filter 0.0.0.0/0 exact;
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+    policy-statement {{ config['transit_vrf'] }}-vrf-from-border-ipv6 {
+  {% for vrf in config['vrfs'] %}
+    {% if vrf['name'] == config['transit_vrf'] %}
+    {#    add any needed route filters in addition to the default route    #}
+      {% if 'tags' in vrf and vrf['tags'] %}
+        {% for this_tag in vrf['tags'] %}
+          {% for t_vrf in config['vrfs'] %}
+            {% if 'ipv6_filtered_prefixes' in t_vrf and t_vrf['ipv6_filtered_prefixes'] %}
+              {% if this_tag in t_vrf['ipv6_filtered_prefixes'] and t_vrf['ipv6_filtered_prefixes'][this_tag] %}
+        term import-tags-{{ t_vrf['name'] }}-{{ this_tag }} {
+            from {
+                protocol bgp;
+                prefix-list-filter {{ t_vrf['name'] }}-ipv6-filtered-prefixes-{{ this_tag }} orlonger;
+            }
+            then accept;
+        }
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+      {% endif %}
+    {#    end of route filters   #}
+    {% endif %}
+  {% endfor %}
+  {% for vrf in config['vrfs'] %}
+    {% if vrf['name'] == config['transit_vrf'] %}
+    {#    add any border-announced routes in addition to the default route    #}
+            {% if 'ipv6_filtered_prefixes' in vrf and vrf['ipv6_filtered_prefixes'] %}
+              {% if 'announce_network' in vrf['ipv6_filtered_prefixes'] and vrf['ipv6_filtered_prefixes']['announce_network'] %}
+        term import-tags-{{ vrf['name'] }}-announce_network {
+            from {
+                protocol bgp;
+                prefix-list-filter {{ vrf['name'] }}-ipv6-announce_network exact;
+            }
+            then accept;
+        }
+              {% endif %}
+            {% endif %}
+    {#    end of route filters   #}
+    {% endif %}
+  {% endfor %}
+        term import-default {
+            from {
+                protocol bgp;
+                route-filter ::/0 exact;
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+    policy-statement {{ config['transit_vrf'] }}-vrf-to-border {
+  {% for vrf in config['vrfs'] %}
+    {% if vrf['rd'] %}
+        term {{ vrf['name'] }}-networks {
+            from {
+      {% if vrf['ipv4_routed_prefixes'] or vrf['strict_filtering'] == False %}
+                prefix-list-filter {{ vrf['name'] }}-ipv4-routed-prefixes exact;
+      {% endif %}
+      {% if vrf['ipv4_other_prefixes'] or vrf['strict_filtering'] == False %}
+                prefix-list-filter {{ vrf['name'] }}-ipv4-other-prefixes orlonger;
+      {% endif %}
+      {#    add any needed route filters in addition to the default route    #}
+      {% if vrf['name'] == config['transit_vrf'] %}
+        {% if 'ipv4_filtered_prefixes' in vrf and vrf['ipv4_filtered_prefixes'] %}
+          {% for this_filter in vrf['ipv4_filtered_prefixes'] %}
+            {% if not "WAN" in this_filter and not "announce_" in this_filter %}
+                prefix-list-filter {{ vrf['name'] }}-ipv4-filtered-prefixes-{{ this_filter }} orlonger;
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+      {% endif %}
+      {#    end of route filters   #}
+            }
+            then accept;
+        }
+    {% endif %}
+  {% endfor %}
+        term default-deny {
+            then reject;
+        }
+    }
+    policy-statement {{ config['transit_vrf'] }}-vrf-to-border-ipv6 {
+  {% for vrf in config['vrfs'] %}
+    {% if vrf['rd'] %}
+        term {{ vrf['name'] }}-networks {
+            from {
+      {% if vrf['ipv6_routed_prefixes'] or vrf['strict_filtering'] == False %}
+                prefix-list-filter {{ vrf['name'] }}-ipv6-routed-prefixes exact;
+      {% endif %}
+      {% if vrf['ipv6_other_prefixes'] or vrf['strict_filtering'] == False %}
+                prefix-list-filter {{ vrf['name'] }}-ipv6-other-prefixes orlonger;
+      {% endif %}
+            }
+            then accept;
+        }
+    {% endif %}
+  {% endfor %}
+        term default-deny {
+            then reject;
+        }
+    }
+}

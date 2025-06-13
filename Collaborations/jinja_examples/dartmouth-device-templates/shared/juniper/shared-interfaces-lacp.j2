@@ -1,0 +1,73 @@
+{% if 'lacp' in config %}
+chassis {
+    aggregated-devices {
+        ethernet {
+            device-count {{ config['lag_count'] }};
+        }
+    }
+}
+{% if config['device_role'] in ["Collapsed-Core", "Distribution"] %}
+protocols {
+    layer2-control {
+        bpdu-block {
+    {% for bundle in config['lacp'] %}
+            interface {{ bundle['name'] }} {
+                drop;
+            }
+    {% endfor %}
+        }
+    }
+}
+{% endif %}
+interfaces {
+{% for bundle in config['lacp'] %}
+  {% for member in bundle['members'] %}
+    {% include 'shared-interfaces-lacp-member.j2' %}
+  {% endfor %}
+  {% for int in config['interfaces'] %}
+    {% if int['name'] == bundle['name'] and not 'no_lacp' in int %}
+    {{ bundle['name'] }} {
+    {% if 'RIOT' in bundle['tags'] %}
+        flexible-vlan-tagging;
+        encapsulation flexible-ethernet-services;
+        aggregated-ether-options {
+            loopback;
+            minimum-links 1;
+        }
+    {% else %}
+      {% if not 'no_lacp' in bundle['tags'] %}
+        aggregated-ether-options {
+            lacp {
+                active;
+                periodic fast;              
+        {% if not 'tagged_subinterfaces' in int and not 'no_evpn' in int and not config['device_role'] in ["WAN"] %}
+          {% if bundle['lacp_id'] == None %}
+                system-id 00:00:00:06:00:01;
+                admin-key 6;
+          {% else %}
+                system-id {{ bundle['lacp_id'] }};
+                admin-key 6;
+          {% endif %}
+        {% endif %}
+        {% if 'force_up' in bundle['tags'] %}
+                force-up;
+        {% endif %}
+            }
+        }
+      {% endif %}
+      {% if not 'tagged_subinterfaces' in int and not 'no_evpn' in int and not config['device_role'] in ["WAN"] %}
+        esi {
+            auto-derive {
+                lacp;
+            }
+            all-active;                     
+        }                                   
+      {% endif %}
+    {% endif %}
+    }
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+}
+{% endif %}
+

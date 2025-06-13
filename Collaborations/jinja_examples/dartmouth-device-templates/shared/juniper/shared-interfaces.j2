@@ -1,0 +1,81 @@
+{% include 'shared-interfaces-lacp.j2' %}
+{% set ns = namespace(riot_config = '') %}
+{% for interface in config['interfaces'] if not interface['name'] in config['lacp_interfaces'] %}
+    {% include 'shared-interfaces-firewall-acls.j2' %}
+interfaces {
+    {% if '.' in interface['name'] %}
+    {% set parts = interface['name'].split('.') %}
+    {% set ifname = parts[0] %}
+    {% set unit = parts[1] %}
+    {% else %}
+    {% set ifname = interface['name'] %}
+    {% set unit = '0' %}
+    {% endif %}
+    {{ ifname }} {
+        {% if 'unused' in interface and interface['unused'] %}
+        unit {{ unit }} {
+            family inet;
+        } 
+        {% else %}
+         {% if ( not interface['enabled'] and (not 'irb' in interface['name']) and not (not 'tagged_subinterfaces' in interface and (('switched' in interface and interface['switched']) or ('routed' in interface and interface['routed']))) ) or ('in_maintenance_mode' in config and config['in_maintenance_mode'] and 'vrf' in interface and not 'lo0' in interface['name'] and not 'irb' in interface['name']) %}
+        disable;
+         {% endif %}
+         {% if 'irb' in ifname %}
+         {% elif not 'subinterface' in interface or ('subinterface' in interface and unit == '0') %}
+        description "{{ interface['description'] }}";
+         {% endif %}
+         {% if 'tagged_subinterfaces' in interface and interface['tagged_subinterfaces'] %}
+        vlan-tagging;
+          {% if 'MX204' in config['vendor_model'] %}
+        encapsulation flexible-ethernet-services;
+          {% endif %}
+         {% endif %}
+         {% if 'irb' in ifname %}
+         {% elif 'mtu' in interface %}
+        mtu {{ interface['mtu'] }};
+         {% elif ifname.startswith('et-') or ifname.startswith('ae') %}
+        mtu 9216;
+         {% endif %}
+         {% if 'fec' in interface and interface['fec'] %}
+        gigether-options {
+            fec fec91;
+        }
+         {% endif %}
+         {% if 'riot' in interface and interface['riot'] %}  {# start of RIOT #}
+           {% include 'shared-interfaces-riot.j2' %}
+         {% elif not 'tagged_subinterfaces' in interface and (('switched' in interface and interface['switched']) or ('routed' in interface and interface['routed'])) %}
+          {% if 'native_vlan' in interface and (not 'irb' in interface['name']) and (not 'tagged_subinterfaces' in interface) and (not 'subinterface' in interface) %}
+        native-vlan-id {% for vlan in config['vlans'] %}{% if vlan['name'] == interface['native_vlan'] %}{{ vlan['vid'] }}{% endif %}{% endfor %};
+          {% endif %}
+        unit {{ unit }} {
+          {% if not interface['enabled'] %}
+            disable;
+          {% endif %}
+          {% if 'irb' in ifname %}
+            description "{{ interface['description'] }}";
+            {% if 'QFX10002-36Q' in config['vendor_model'] %}
+            bandwidth 2880g;
+            {% elif 'QFX10002-72Q' in config['vendor_model'] %}
+            bandwidth 5760g;
+            {% endif %}
+          {% elif 'subinterface' in interface and interface['subinterface'] and not unit == '0' %}
+            description "{{ interface['description'] }}";
+            vlan-id {% for vlan in config['vlans'] %}{% if vlan['name'] == interface['native_vlan'] %}{{ vlan['vid'] }}{% endif %}{% endfor %};
+          {% endif %}
+          {% if 'routed' in interface and interface['routed'] %}  {# start of routed interface #}
+            {% include 'shared-interfaces-routed.j2' %}
+          {% endif %}  {# end of routed interface #}
+          {% if 'switched' in interface and interface['switched'] %}  {# start of switched interface #}
+            {% include 'shared-interfaces-switched.j2' %}
+          {% endif %}  {# end of switched interface #}
+        }
+         {% endif %}
+        {% endif %}
+    }
+}
+{% endfor %}
+{% if ns.riot_config != '' %}
+  {% include 'shared-interfaces-riot2.j2' %}
+{% endif %}
+{% include 'shared-interfaces-vlans.j2' %}
+

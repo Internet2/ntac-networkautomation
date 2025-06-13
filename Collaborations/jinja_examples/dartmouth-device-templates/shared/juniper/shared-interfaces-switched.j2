@@ -1,0 +1,36 @@
+            family ethernet-switching {
+                interface-mode {{ interface['mode'] }};
+                vlan {
+                    {% if interface['mode'] == 'access' %}
+                    members {{ interface['vlans'] }};
+                    {% else %}
+                      {% if config['device_role'] in ["Collapsed-Core", "Distribution"] %}
+                        {% set vlan_config = [] %}
+                        {# if no_evpn is set then we should skip checking for connected EVPN VLANs #}
+                        {% if not 'no_evpn' in interface %}
+                          {% for connected_device in config['connected_devices'] %}
+                            {% if connected_device['local_interface'].lower() == ifname %}
+                              {# devices get only VLANs that are present on the device #}
+                              {% for vlan in connected_device['vlans'] %}
+                                {%if 'vni' in vlan and vlan['vni'] != 0 and vlan_config.append(vlan['name']) %} {% endif %}
+                              {% endfor %}
+                            {% endif %}
+                          {% endfor %}
+                        {% endif %}
+                        {% if vlan_config %}
+                    members [ {% for vlan in vlan_config %}{{ config["vids"][vlan] }} {% endfor %}];
+                        {% else %}
+                    members [ {% for vlan in interface['vlans'] %}{{  config["vids"][vlan] }} {% endfor %}];
+                        {% endif %}
+                      {% endif %}
+                      {% if config['device_role'] in ["Collapsed-Core", "Core", "Services"] %}
+                    members [ {% for vlan in interface['vlans'] %}{{ vlan }} {% endfor %}];
+                      {% endif %}
+                    {% endif %}
+                }
+                {% if interface['mode'] == 'access' %}
+                storm-control default;
+                recovery-timeout 600;
+                {% endif %}
+            }
+

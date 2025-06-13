@@ -1,0 +1,79 @@
+    {% set mgmt_ip = config['mgmt_ip'] %}
+    {% if 'vlan' in mgmt_ip %}
+    {% if mgmt_ip['vlan'] not in config['routed-vlans'] %}
+interfaces {
+    irb.{{ mgmt_ip['vlan'] }} {
+        family inet {
+            address {{ mgmt_ip['ip'] }}/{{ mgmt_ip['mask'] }};
+        }
+    }
+}
+    {% endif %}
+    {% endif %}
+    {% if 'oob-fiber' in mgmt_ip %}
+    {% if 'virtual_chassis' in config %}
+interfaces {
+    vme {
+    {% else %}
+    em1 {
+    {% endif %}
+        unit 0 {
+            family inet {
+                address {{ mgmt_ip['ip'] }}/{{ mgmt_ip['mask'] }};
+            }
+        }
+    }
+}
+    {% elif 'oob' in mgmt_ip %}
+    {% if 'virtual_chassis' in config %}
+interfaces {
+    vme {
+    {% else %}
+    em0 {
+    {% endif %}
+        unit 0 {
+            family inet {
+                address {{ mgmt_ip['ip'] }}/{{ mgmt_ip['mask'] }};
+            }
+        }
+    }
+}
+    {% endif %}
+    {% if 'physical' in mgmt_ip %}
+interfaces {
+    {{ mgmt_ip['physical'] }} {
+        unit 0 {
+            family inet {
+                address {{ mgmt_ip['ip'] }}/{{ mgmt_ip['mask'] }};
+            }
+        }
+    }
+}
+    {% endif %}
+routing-options {
+    static {
+        route 0.0.0.0/0 next-hop {{ config['mgmt_ip']['default_gateway'] }};
+    }
+}
+    {% if 'oob' in mgmt_ip or 'oob-fiber' in mgmt_ip %}
+    {% if 'virtual_chassis' in config %}
+    {% else %}
+routing-instances {
+    mgmt_junos {
+        routing-options {
+            static {
+                route 0.0.0.0/0 next-hop {{ config['mgmt_ip']['default_gateway'] }};
+            }
+        }
+    }
+}
+    {% endif %}
+    {% endif %}
+{% if 'vlan' in mgmt_ip %}
+vlans {
+    {% for vlan in config['vlans'] %}{% if vlan['vid'] == mgmt_ip['vlan'] %}
+    {{ vlan['name'] }}{% endif %}{% endfor %} {
+        l3-interface irb.{{ mgmt_ip['vlan'] }};
+    }
+}
+{% endif %}

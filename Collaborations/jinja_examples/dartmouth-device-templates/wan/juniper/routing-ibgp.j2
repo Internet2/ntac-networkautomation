@@ -1,0 +1,86 @@
+policy-options {
+    policy-statement vrf-ibgp {
+        from {
+            protocol [ static direct bgp ];
+        }
+        then {
+             next-hop self;
+             accept;
+        }
+    }
+    policy-statement send-direct {
+        term 2 {
+            from protocol direct;
+            then accept;
+        }
+    }
+}
+protocols {
+    bgp {
+        group border-routers {
+            type internal;
+            mtu-discovery;
+            family inet {
+                unicast;
+            }
+            export send-direct;
+            local-as {{ config['asn'] }} loops 2;
+            bfd-liveness-detection {
+                minimum-interval 350;
+                multiplier 3;
+                session-mode single-hop;
+            }
+     {% for peer in config['bgp']['wan_peers']['border-routers'] %}
+         {% if '::' in peer['ip'] %}
+         {% else %}
+            neighbor {{ peer['ip'] }} {
+                description "{{ peer['name'] }}";
+                export vrf-ibgp;
+                peer-as {{ peer['asn'] }};
+              {% for auth_peer in config['bgp']['auth'] %}
+                {% if auth_peer['ip'] == peer['ip'] %}
+                authentication-key "{{ auth_peer['key'] }}";
+                {% endif %}
+              {% endfor %}
+                {% if 'disabled' in peer and peer['disabled'] %}
+                shutdown;
+                {% endif %}
+            }
+         {% endif %}
+     {% endfor %}
+        }
+        group border-routers-ipv6 {
+            type internal;
+            mtu-discovery;
+            family inet6 {
+                unicast;
+                flow;
+            }
+            export send-direct;
+            local-as {{ config['asn'] }} loops 2;
+            bfd-liveness-detection {
+                minimum-interval 350;
+                multiplier 3;
+                session-mode single-hop;
+            }
+     {% for peer in config['bgp']['wan_peers']['border-routers'] %}
+         {% if '::' in peer['ip'] %}
+            neighbor {{ peer['ip'] }} {
+                description "{{ peer['name'] }}";
+                export vrf-ibgp;
+                peer-as {{ peer['asn'] }};
+              {% for auth_peer in config['bgp']['auth'] %}
+                {% if auth_peer['ip'] == peer['ip'] %}
+                authentication-key "{{ auth_peer['key'] }}";
+                {% endif %}
+              {% endfor %}
+                {% if 'disabled' in peer and peer['disabled'] %}
+                shutdown;
+                {% endif %}
+            }
+         {% endif %}
+     {% endfor %}
+        }
+    }
+}
+

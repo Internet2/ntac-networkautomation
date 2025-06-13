@@ -1,4 +1,4 @@
-{% if 'MX204' in config['device_platform'] %}
+{% if 'MX204' in config['vendor_model'] %}
   {% for vlan in config['vlans'] %}
     {% if 'name' in vlan and vlan['name'] and not 'subinterface' in vlan['tags'] and not vlan['id'] == 1 %}
 bridge-domains {
@@ -12,18 +12,27 @@ bridge-domains {
                  {% else %}
         interface {{ interface['name'] }};
                  {% endif %}
+             {% elif 'switched' in interface and not 'trunk' in interface['mode'] and vlan['name'] in interface['vlans'] %}
+        interface {{ interface['name'] }};
              {% endif %}
         {% endfor %}
     }
 }
     {% endif %}
   {% endfor %}
-{% elif 'QFX10002' in config['device_platform'] %}
+{% elif 'QFX10002' in config['vendor_model'] %}
 vlans {
 {% for vlan in config['vlans'] %}
     {% if vlan['vid'] %}
     {{ vlan['name'] }} {
         vlan-id {{ vlan['vid'] }};
+        {% for interface in config['interfaces'] %}
+             {% if 'native_vlan' in interface and interface['native_vlan'] == vlan['name'] and 'irb' in interface['name'] %}
+                 {% if 'routed' in interface and interface['routed'] %}
+        l3-interface {{ interface['name'] }};
+                 {% endif %}
+             {% endif %}
+        {% endfor %}
     }
     {% endif %}
 {% endfor %}

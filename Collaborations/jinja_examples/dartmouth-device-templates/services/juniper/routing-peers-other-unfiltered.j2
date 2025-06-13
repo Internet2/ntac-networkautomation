@@ -1,0 +1,66 @@
+routing-instances {                     
+    {{ peer['vrf'] }} {
+        protocols {
+            bgp {
+  {% if '::' in peer['ip'] %}
+                group others-ipv6 {
+                    type external;
+                    mtu-discovery;
+                    family inet6 {
+                        unicast;
+                        flow;
+                    }
+                    bfd-liveness-detection {
+                        minimum-interval 350;
+                        multiplier 3;
+                        session-mode single-hop;
+                    }
+                    neighbor {{ peer['ip'] }} {
+                        description "{{ peer['name'] }}";
+      {% if peer['trusted'] == True %}
+                        import {{ peer['vrf'] }}-vrf-to-sn-ipv6-safe;
+      {% else %}
+                        import {{ peer['vrf'] }}-vrf-to-sn-ipv6-unsafe;
+      {% endif %}
+                        export {{ peer['vrf'] }}-vrf-from-sn-ipv6;
+                        peer-as {{ peer['asn'] }};  
+                    {% for auth_peer in config['bgp']['auth'] %}
+                      {% if auth_peer['ip'] == peer['ip'] %}
+                        authentication-key "{{ auth_peer['key'] }}";
+                      {% endif %}
+                    {% endfor %}
+                    }                   
+                }                       
+  {% else %}
+                group others {
+                    type external;
+                    mtu-discovery;
+                    family inet {
+                        unicast;
+                    }
+                    bfd-liveness-detection {
+                        minimum-interval 350;
+                        multiplier 3;
+                        session-mode single-hop;
+                    }
+                    neighbor {{ peer['ip'] }} {
+                        description "{{ peer['name'] }}";
+      {% if peer['trusted'] == True %}
+                        import {{ peer['vrf'] }}-vrf-to-sn-safe;
+      {% else %}
+                        import {{ peer['vrf'] }}-vrf-to-sn-unsafe;
+      {% endif %}
+                        export {{ peer['vrf'] }}-vrf-from-sn;
+                        peer-as {{ peer['asn'] }};  
+                    {% for auth_peer in config['bgp']['auth'] %}
+                      {% if auth_peer['ip'] == peer['ip'] %}
+                        authentication-key "{{ auth_peer['key'] }}";
+                      {% endif %}
+                    {% endfor %}
+                    }                   
+                }                       
+  {% endif %}
+            }                           
+        }                               
+    }                                   
+}

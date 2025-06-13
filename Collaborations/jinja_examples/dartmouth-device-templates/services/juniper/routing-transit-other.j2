@@ -1,0 +1,86 @@
+policy-options {
+    policy-statement {{ config['transit_vrf'] }}-vrf-from-{{ peer['remote-vrf'] }} {
+    {% for vrf in config['vrfs'] %}
+      {% if vrf['name'] == peer['remote-vrf'] and vrf['receive_leaks'] == True %}
+        term leaked-networks {
+            from {
+                prefix-list-filter leaked-ipv4-routed-prefixes exact;
+                prefix-list-filter leaked-ipv4-other-prefixes orlonger;
+            }
+            then reject;
+        }
+      {% endif %}
+    {% endfor %}
+        term import-networks {
+            from {
+    {% for t_vrf in config['vrfs'] %}
+      {% if t_vrf['name'] == peer['remote-vrf'] and t_vrf['ipv4_routed_prefixes'] %}
+                prefix-list-filter {{ peer['remote-vrf'] }}-ipv4-routed-prefixes exact;
+      {% endif %}
+    {% endfor %}
+    {% for t_vrf in config['vrfs'] %}
+      {% if t_vrf['name'] == peer['remote-vrf'] and t_vrf['ipv4_other_prefixes'] %}
+                prefix-list-filter {{ peer['remote-vrf'] }}-ipv4-other-prefixes orlonger;
+      {% endif %}
+    {% endfor %}
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+    policy-statement {{ config['transit_vrf'] }}-vrf-to-{{ peer['remote-vrf'] }} {
+        term import-default {
+            from {
+                route-filter 0.0.0.0/0 exact;
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+    policy-statement {{ config['transit_vrf'] }}-vrf-from-{{ peer['remote-vrf'] }}-ipv6 {
+    {% for vrf in config['vrfs'] %}
+      {% if vrf['name'] == peer['remote-vrf'] and vrf['receive_leaks'] == True %}
+        term leaked-networks {
+            from {
+                prefix-list-filter leaked-ipv6-routed-prefixes exact;
+                prefix-list-filter leaked-ipv6-other-prefixes orlonger;
+            }
+            then reject;
+        }
+      {% endif %}
+    {% endfor %}
+        term import-networks {
+            from {
+    {% for t_vrf in config['vrfs'] %}
+      {% if t_vrf['name'] == peer['remote-vrf'] and t_vrf['ipv6_routed_prefixes'] %}
+                prefix-list-filter {{ peer['remote-vrf'] }}-ipv6-routed-prefixes exact;
+      {% endif %}
+    {% endfor %}
+    {% for t_vrf in config['vrfs'] %}
+      {% if t_vrf['name'] == peer['remote-vrf'] and t_vrf['ipv6_other_prefixes'] %}
+                prefix-list-filter {{ peer['remote-vrf'] }}-ipv6-other-prefixes orlonger;
+      {% endif %}
+    {% endfor %}
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+    policy-statement {{ config['transit_vrf'] }}-vrf-to-{{ peer['remote-vrf'] }}-ipv6 {
+        term import-default {
+            from {
+                route-filter ::/0 exact;
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+}

@@ -4,6 +4,21 @@ policy-options {
         {{ mgmt_station }};
         {% endfor %}
     }
+    prefix-list dns_servers {
+        {% for dns_server in config['dns_servers'] %}
+        {{ dns_server }};
+        {% endfor %}
+    }
+    prefix-list ntp_servers {
+        {% for ntp_server in config['ntp_servers'] %}
+        {{ ntp_server }};
+        {% endfor %}
+    }
+    prefix-list dhcp_servers { 
+        {% for dhcp_server in config['dhcp_servers'] %}
+        {{ dhcp_server }};
+        {% endfor %}
+    }
     prefix-list dns_hosts {
         apply-path "system name-server <*>";
     }

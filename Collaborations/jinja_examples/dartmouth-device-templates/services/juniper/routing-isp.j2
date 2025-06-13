@@ -1,0 +1,70 @@
+   {# advertise campus supernets #}
+policy-options {
+    policy-statement {{ peer['vrf'] }}-vrf-from-sn-announce_network {
+        term announce_network {
+            from {
+                prefix-list Internet-ipv4-filtered-prefixes-announce_network;
+            }
+            then accept;
+        }
+        term default {
+            then reject;
+        }
+    }
+{#### not supporting ipv6 yet ####
+    policy-statement {{ peer['vrf'] }}-vrf-from-sn-announce_network-ipv6 {
+        term announce_network {
+            from {
+                prefix-list Internet-ipv6-filtered-prefixes-announce_network;
+            }
+            then accept;
+        }
+        term default {
+            then reject;
+        }
+    }
+#### not supporting ipv6 yet ####}
+   {# policy-statement using filter for input #}
+   {% for t_vrf in config['vrfs'] %}
+     {% if t_vrf['name'] == peer['vrf'] %}
+       {% if 'ipv4_filtered_prefixes' in t_vrf %}
+         {% for prefix_filter in t_vrf['ipv4_filtered_prefixes'] %}
+           {% if prefix_filter == peer['filter'] %}
+    policy-statement {{ peer['vrf'] }}-vrf-to-sn-{{ prefix_filter }} {
+        term import-networks {
+            from {
+             {% for prefix in t_vrf['ipv4_filtered_prefixes'][prefix_filter] %}
+                route-filter {{ prefix }} orlonger;
+             {% endfor %}
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+           {% endif %}
+         {% endfor %}
+       {% endif %}
+       {% if 'ipv6_filtered_prefixes' in t_vrf %}
+         {% for prefix_filter in t_vrf['ipv6_filtered_prefixes'] %}
+           {% if prefix_filter == peer['filter'] %}
+    policy-statement {{ peer['vrf'] }}-vrf-ipv6-to-sn-{{ prefix_filter }} {
+        term import-networks {
+            from {
+             {% for prefix in t_vrf['ipv6_filtered_prefixes'][prefix_filter] %}
+                route-filter {{ prefix }} orlonger;
+             {% endfor %}
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+           {% endif %}
+         {% endfor %}
+       {% endif %}
+     {% endif %}
+   {% endfor %}
+}

@@ -1,0 +1,6 @@
+system {
+    domain-name {{ config['dns']['network-device-domainname'] }};
+    management-instance;
+}
+{% include 'shared-system-qfx-mgmt-int.j2' %}
+

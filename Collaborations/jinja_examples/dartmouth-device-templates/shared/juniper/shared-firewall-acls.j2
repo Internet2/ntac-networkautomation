@@ -1,0 +1,48 @@
+{% if 'acls' in config %}
+{% for aclname in config['acls'] %}
+{% set acl = config['acls'][aclname] %}
+firewall {
+    family {% if acl['type'] == 'ipv4'%}inet{% elif acl['type'] == 'ipv6' %}inet6{% elif acl['type'] == 'layer2' %}ethernet-switching{% else %}invalid_acl_type{% endif %} {
+        filter {{ aclname }} {
+            {% for rule in acl['rules'] %}
+            term {% if 'description' in rule %}{{ rule['description'] }}{% else %}{{ loop.index }}{% endif %} {
+                {% if 'from' in rule or 'to' in rule or 'protocol' in rule %}
+                from {
+                    {% if 'protocol' in rule %}
+                    protocol {{ rule['protocol'] }};
+                    {% endif %}
+                    {% if 'from' in rule %}
+                    {% if 'ips' in rule['from'] %}
+                    source-address {
+                        {% for ip in rule['from']['ips'] %}
+                        {{ ip }};
+                        {% endfor %}
+                    }
+                    {% endif %}
+                    {% if 'src_ports' in rule['from'] %}
+                    source-port [ {% for port in rule['from']['src_ports'] %}{{ port }} {% endfor %}];
+                    {% endif %}
+                    {% endif %}
+                    {% if 'to' in rule %}
+                    {% if 'ips' in rule['to'] %}
+                    destination-address {
+                        {% for ip in rule['to']['ips'] %}
+                        {{ ip }};
+                        {% endfor %}
+                    }
+                    {% endif %}
+                    {% if 'dst_ports' in rule['to'] %}
+                    destination-port [ {% for port in rule['to']['dst_ports'] %}{{ port }} {% endfor %}];
+                    {% endif %}
+                    {% endif %}
+                }
+                {% endif %}
+                then {% if rule['action'] == 'allow' %}accept{% elif rule['action'] == 'deny' %}discard{% else %}{{ rule['action'] }}{% endif %};
+            }
+            {% endfor %}
+        }
+    }
+}
+{% endfor %}
+{% endif %}
+

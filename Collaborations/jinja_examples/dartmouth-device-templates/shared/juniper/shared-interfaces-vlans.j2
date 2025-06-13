@@ -1,0 +1,10 @@
+{% for interface in config['interfaces'] if not interface['name'] in config['lacp_interfaces'] and 'vrf' in interface %}
+  {% if 'lo0' not in interface['name'] and 'native_vlan' in interface and 'irb' in interface['name'] %}
+vlans {
+    {{ interface['native_vlan'] }} {
+        l3-interface {{ interface['name'] }};
+    }
+}
+  {% endif %}
+{% endfor %}
+

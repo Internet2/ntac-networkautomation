@@ -1,0 +1,751 @@
+{% if 'mist_wired_assurance' in config['custom_fields'] and config['custom_fields']['mist_wired_assurance'] == "adopt" %}
+system {
+    login {
+        user mist {
+            class super-user;
+            authentication {
+                encrypted-password "$6$rRSlKBXpmiKer1M0$S7.mVp7WC8yws5yjY5ddI1u7t.IoXte1IslCS5zp91lPpqNtPNS9.SlpmsPwaYeWPXc8EwaKB.2ky6UhQsbp3.";
+            }
+        }
+    }
+  authentication-order password;
+    services {
+        outbound-ssh {
+            client mist {
+                device-id 790be815-af8f-4dc5-b8c2-e01b8a107db4;
+                secret "$9$9Lh-A1RKM8LNduOdbw2aJUjHkTzCA0ESrOB-VY2GUqmfzF/tpBSyKhcoJDjPfTz36uOSrevLx36u1IRSys2goaUik.Qz6f5ylvW-d.PfQF/tpB1hS.PhSleW8NdbYgJHqmQ36iHuORhrlJGUjmfTz39Cun6M8XNbwqmPfT39CuORh/9ORhSeKoJZji.P5Qz69wYgJGU.m0B1hlKx7VwgoXxmfQF/9p0BIRSlKM7NbXxmfTQ9C8XxN-waZUm5QZG369CB1cylevLbs2JZjsYz36/0O7-dV24oJGiqmaJ9Atu1I7-dV4aik.m5QxNVY24DjHqmT69pu1Rcy1IEyKvLXHq.f36CtuIhSpuRSreXxdbs2ZUkqf";
+                keep-alive {
+                    retry 3;
+                    timeout 5;
+                }
+                services netconf;
+                oc-term.mistsys.net {
+                    port 2200;
+                    retry 1000;
+                    timeout 60;
+                }
+            }
+        }
+    }
+}
+firewall {
+    family inet {
+        filter mgmt-traffic {
+            term mist-cloud {
+                from {
+                    source-port [ 2200 443 ];
+                    tcp-flags "((syn & ack) | (ack) | (rst) | (fin) | (psh))";
+                }
+                then accept;
+            }
+        }
+    }
+}
+{% endif %}
+{% if 'mist_wired_assurance' in config['custom_fields'] and config['custom_fields']['mist_wired_assurance'] == "legacy" %}
+groups {
+    mist-script {
+        system {
+            scripts {
+                op {
+                    file mist_helper.py {
+                        arguments {
+                            cmd;
+                        }
+                        checksum sha-256 ec5a6c3858543c48564865faca6a8068781fd47e1e4ed0e9152bdd525b7c5ba4;
+                    }
+                    file mist_vccmd.py {
+                        checksum sha-256 b4012cfbaa9ed42b776fa96d016dd9d1036ebe1a5706ede49567db366d5f5e4b;
+                    }
+                    file mist_pyagent_tools.py {
+                        arguments {
+                            cmd;
+                            sha256sum;
+                            url;
+                            version;
+                        }
+                        checksum sha-256 230bd8950dbae52fd7df7422657e32061b3690475131a602def74f16c886b40a;
+                    }
+                }
+            }
+        }
+        event-options {
+            generate-event {
+                get-stats-every-three-minute time-interval 180;
+                monitor-diskspace-now time-interval 86400;
+            }
+            policy log-on-snmp-trap-link-up {
+                events snmp_trap_link_up;
+                within 90 {
+                    not events chassisd_vchassis_member_update_notice;
+                }
+                attributes-match {
+                    "{$$.interface-name}" matches "^[^.]+$";
+                }
+                then {
+                    event-script mist_link_up_logger.py;
+                }
+            }
+            policy log-on-snmp-trap-link-down {
+                events snmp_trap_link_down;
+                within 90 {
+                    not events chassisd_vchassis_member_update_notice;
+                }
+                attributes-match {
+                    "{$$.interface-name}" matches "^[^.]+$";
+                }
+                then {
+                    event-script mist_link_down_logger.py;
+                }
+            }
+            policy backup-cfg-after-commit {
+                events ui_commit_completed;
+                within 5 {
+                    trigger on 1;
+                }
+                then {
+                    event-script mist_event_dispatcher.py;
+                }
+            }
+            policy backup-cfg-after-no-confirmed {
+                events ui_commit_not_confirmed;
+                attributes-match {
+                    ui_commit_not_confirmed.message matches .*complete;
+                }
+                then {
+                    event-script mist_event_dispatcher.py;
+                }
+            }
+            policy log-on-storm-ctrl-in-effect {
+                events l2ald_st_ctl_in_effect;
+                then {
+                    event-script mist_storm_control_event_logger.py;
+                }
+            }
+            policy log-on-system-events {
+                events [ dot1xd_auth_session_deleted dot1xd_rcvd_eaplogof_athntictd dot1xd_usr_access_denied dot1xd_usr_authenticated dot1xd_usr_session_disconnected dot1xd_usr_athntictd_gst_vlan eswd_stp_state_change_info l2cpd_receive_bpdu_block_enabled authd_radius_server_status_change chassisd_snmp_trap10 ddos_protocol_violation_set ddos_protocol_violation_clear evpn_bgp_peer_status_change evpn_core_isolated evpn_core_isolation_cleared evpn_duplicate_mac bfdd_trap_shop_state_up bfdd_trap_shop_state_down ];
+                within 60 {
+                    trigger until 10;
+                }
+                then {
+                    event-script mist_event_dispatcher.py;
+                }                           
+            }
+            policy log-critical-system-events {
+                events [ chassisd_vchassis_member_update_notice chassisd_vchassis_member_op_notice l2ald_mac_limit_reached_global l2ald_mac_limit_reset_global snmpd_trap_cold_start ];
+                then {
+                    event-script mist_event_dispatcher.py;
+                }
+            }
+            policy monitor-diskspace-policy {
+                events monitor-diskspace-now;
+                then {
+                    event-script mist_monitor_diskspace.py;
+                }
+            }
+            policy get-stats-policy {
+                events get-stats-every-three-minute;
+                then {
+                    event-script mist_event_dispatcher.py;
+                }
+            }
+            policy system-srx-route-events {
+                events [ rpd_ospf_nbrdown rpd_ospf_nbrup rpd_bgp_neighbor_state_changed ];
+                then {
+                    event-script mist_srx_rt_event.py;
+                }
+            }
+            policy log-on-vccp-port-up {
+                events vccpd_protocol_adjup;
+                attributes-match {
+                    "{$$.interface-name}" matches "^[^.]+";
+                }
+                then {
+                    event-script mist_link_up_logger.py;
+                }
+            }
+            policy log-on-vccp-port-down {
+                events vccpd_protocol_adjdown;
+                attributes-match {
+                    "{$$.interface-name}" matches "^[^.]+";
+                }
+                then {
+                    event-script mist_link_down_logger.py;
+                }
+            }
+            event-script {
+                file mist_event_dispatcher.py {
+                    python-script-user mist;
+                    checksum sha-256 5fd828282bc29a7c140f03200507044a86dc1869fe2438fb3d2cbcc0cdff82ae;
+                }
+                file mist_link_up_logger.py {
+                    python-script-user mist;
+                    checksum sha-256 92f3090ff5fa38343e958f64ca7d03d12dcffffa2dbff25bb47f4f77a712d641;
+                }
+                file mist_link_down_logger.py {
+                    python-script-user mist;
+                    checksum sha-256 47c2f4b0c575b2a8ead65c36ef451c7705f0b040c7c1085dd443c7a5ac7a2153;
+                }
+                file mist_backup_cfg.py {
+                    python-script-user mist;
+                    checksum sha-256 9ef1c0fc06bd78abc097bcc9a4f6e47eed494d3edaf498dd69df33eb194fc58f;
+                }
+                file mist_storm_control_event_logger.py {
+                    python-script-user mist;
+                    checksum sha-256 871b7efa4fe7d04d86034fcdcb63624c675956d7511b2a45ebb98299632be882;
+                }
+                file mist_link_event_capturer.py {
+                    python-script-user mist;
+                    checksum sha-256 9d2f983947c437b757cd90fd1a6eef3fc979a8aaa63e52a739e4539fe2e7a867;
+                }                           
+                file mist_monitor_diskspace.py {
+                    python-script-user mist;
+                    checksum sha-256 e751c8cf955c2fed7c5f38e3a6e5168c5550a1b24b272a0722421b917d697479;
+                }
+                file mist_dynamic_port_usages.py {
+                    python-script-user mist;
+                    checksum sha-256 e6a667b08dc8714a043dc08f44a13b0480f35fae7c9eecfd1f932ca3821629a4;
+                }
+                file mist_dynamic_port_commit.py {
+                    python-script-user mist;
+                    checksum sha-256 4fb25037a8ec5d57ac72f622c005baec2ab82b4f1e1a218f8eac03f6b39e71de;
+                }
+                file mist_event_aggregator.py {
+                    python-script-user mist;
+                    checksum sha-256 ca1426d833eddb1f519e7a5860cef6fedd08a2d091656add0537aceaf7a9eb7d;
+                }
+                file mist_vcsetup_agent.py {
+                    python-script-user mist;
+                    checksum sha-256 a6a50869c1d92e2bfe473ace86ed2ec0a4710d352cd5683673668f99b3ebb505;
+                }
+                file mist_ssr.py {
+                    python-script-user mist;
+                    checksum sha-256 59faa393b78e526bab64cddb4a99025e290b4edeeb583376816fc799903d3ff6;
+                }
+                file mist_srx_rt_event.py {
+                    python-script-user mist;
+                    checksum sha-256 dd6fc6d40fed12444a264139ac3825461c3309d243f3176595d9d535ad37a384;
+                }
+            }
+        }
+    }
+    mist-dpc {
+        event-options {
+            generate-event {
+                timer-every-one-minute time-interval 60;
+            }
+            policy dynamic-port-detect {
+                events [ lldp_neighbor_up snmp_trap_link_up snmp_trap_link_down ui_commit_completed dot1xd_usr_authenticated get-stats-every-three-minute ];
+                within 90 {
+                    not events chassisd_vchassis_member_update_notice;
+                }
+                then {
+                    event-script mist_dynamic_port_usages.py;
+                }
+            }
+            policy dynamic-port-commit {
+                events timer-every-one-minute;
+                then {
+                    event-script mist_dynamic_port_commit.py;
+                }
+            }
+        }
+    }
+    mxoc-script {
+        system {
+            scripts {
+                commit {
+                    file mxoc_jet_app_optional_fix.slax {
+                        optional;
+                    }
+                }
+            }
+        }
+        event-options {
+            policy mxoc-critical-system-events {
+                events [ chassisd_vchassis_member_update_notice snmpd_trap_cold_start chassisd_vchassis_member_op_notice ];
+                then {
+                    event-script mxoc_critical_events.py;
+                }
+            }
+            event-script {
+                file mxoc_critical_events.py {
+                    python-script-user mist;
+                    checksum sha-256 d6a356dfe806cad78fc15e1e64b786238fd7603307c17ec15a69eb9b17631385;
+                }
+            }
+        }
+    }
+}
+apply-groups [ ezqos-voip mist-script mxoc-script ];
+firewall {
+    family inet {
+        filter mgmt-traffic {
+            term mist-cloud {
+                from {
+                    source-port [ 2200 443 ];
+                    tcp-flags "((syn & ack) | (ack) | (rst) | (fin) | (psh))";
+                }
+                then accept;
+            }
+        }
+    }
+}
+system {
+    authentication-order password;
+    commit synchronize;
+    scripts {
+        language python;
+        synchronize;
+    }
+    login {
+        user mist {
+            class super-user;
+            full-name mist;
+            uid 63157;
+            authentication {
+                encrypted-password "$6$TJEv/raVeNR3PXUc$0XpMv.e0joJQlMe6n0HPVmHF2obPinymXap5b3jrxlmAejyLOjbdc/za7BQV30NbHClx0Wdei/lRf/ICXRIA8/";
+                ssh-rsa "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDK2SIyAqB12mSWuY8eqlk/xvBwBrWzHfReb0rQsA16yT1W3hm54IIxIsmQQwqt1bLsTm0pNULddaAD6DN67j1HJOrPxVtrXIgeLl8LjPtC8ya60ndXxn9MATVlcvTDu5vxpmCWs6IktppudVDvBvacKCZlk7eSX3XtoKeXUcj/X3Y4eniDxMAosLIvCaoIWeJ4RNDbF5jUmcsJrbuvLt1WIu0L4VNhmQGp8aSWQSc6yxlFRUkjrGybCyQtaX4mG2b0M7NYywbd+XGp4CEGLdNqxVNcM6avWgBecIjWIKxeWQZjoHwknQC2nhEwUydDMJRRhG/dRa651DB26kyq98ek/oDeLflBVylNU26wb4d7DdnEgpzRHeEVSwMMlFCpOgMjcBR2sTwTmmEP5aKUrbjMcWyeg5Zl1fn9YGdgOF81zONdN8r+Z1qD2MKgh7WAEYN0y+XulI6z5kQW9cIn2Y4STRp2kYe2bUcmNwwelYiSjObjYHV4YYd8tPDwVjCrwDk= mist@790be815-af8f-4dc5-b8c2-e01b8a107db4";
+                ssh-rsa "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDGSZXWQbRESKnHPyBrRFLz8pr+e7clzic0wjJFx2DC06bIaR1CqmxHQUKvuzUfmAedkrMcGw+wWNizYOlPFzWrHCNXpyzx2+Sr9ZUlk27UPfMI6XuB1GZ34ielCCLHt40eU4E1cdy4wnIZ3nxfL7vb6hxzFcC8/giRrujJBK87iSAoByaB9lulNvdHokRNnTP6mCJquOtGdaUTrqUqTr8sueEJTt8ehotdNSlrDreeHODZtB2sgQpmGNzQ2zEFskCqoZl9lgL8IlR/0NSvkOBPAOiikeemDzW3KpLdvXoXUvmMaZPkB0zpS7/T/gMtYLxZ51qO49PKVBvBXr+a3nIkJe1403J80lvmOwVbdO8bvywV6mNpjXe2J0m2Cm+LV7kdD1lZKhih4/DEvBJ4rkfZN/t+rxqms59EpTCkKSb/+N3j/q1OKfXY8o2VEvSkTn1Ag8UNiq1kh84F7CC00UtEbpBAV/Z/AOCaVrdzm3595+9oL2GsXP0i5cPx2ylaFzJW0hB4OerU4DzQ4n/2C8Oq4v/sgBPwjW4YRFmaidoQr2blcoqf916dRsmQR5G1Uc1g3ps+ph5BdjUiZgPvxCTCPIOzNsTbu888UDgnBBF1YeeGXRmfkwQobu8eWfjm+HI0H8/rSfIPDBrjI3hZsHcN0ZYKyzMwkWVmAdjuCaYsWw== noninteractive@mistsys.com";
+                ssh-ecdsa "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBItBz6WSD+YBbvX2qvKlLQ71h2qms2A5ARsFQK7GQSiBbh6450VcCNNq6YDmb1/pOrrJ8q7cR90vsvNROi4ZD7I= bot+interactive@mistsys.com";
+            }
+        }
+    }
+    services {
+        outbound-ssh {
+            traceoptions {
+                file outbound-ssh.log size 64k files 5;
+                flag all;
+            }
+            client mist {
+                device-id 790be815-af8f-4dc5-b8c2-e01b8a107db4;
+                secret "$9$btYaZiHmTFnwYgJGjq.fTz3ApIRSrvWz3hSyrvM7-VwaZik.f5FUDkPQF/9uO1RreWLx7db8LNbwYZG36/C0BcylvMXleZUHkTQyleKxN4aZkmfiHBIcSMWDiHqmTFn/pO1/9lKW87Ns24JjHf5FCA0zFKMWLVbYgoaZjik.5T3bs2aJUHkmfT3ApO1RSlKpuWLx7sYQF369p1RheM8SyaZUDmPEcSyvWx7Vwgox7DiHqf5yleWNdoJGDHq8Xk.Pfn6uO1RlK8X7Vs2O1SeKWx7bs24aUji.Qz65TEcyrvMikqmz3Ap0Ehrqmz6/9puO1REclMWxVs27Nmfz39CM8L7bs4aZkqfGUCtp0hcvWL7wYoJG";
+                keep-alive {
+                    retry 12;
+                    timeout 5;
+                }
+                services netconf;
+                oc-term.mistsys.net {
+                    port 2200;
+                    retry 1000;
+                    timeout 60;
+                }
+            }
+        }
+    }
+    syslog {
+        file interactive-commands {
+            match "!(.*mist.*)";
+            archive size 2m files 5;
+        }
+        file messages {
+            authorization any;
+            archive size 2m files 5;
+        }
+        file escript.log {
+            archive size 2m files 5;
+        }
+        file op-script.log {
+            archive size 2m files 5;
+        }
+        file snapshot {
+            archive size 2m files 5;
+        }
+    }
+    extensions {
+        providers {
+            juniper {
+                license-type juniper deployment-scope private;
+            }
+        }
+        extension-service {
+            application {
+                file mist_pkgbooster.py {
+                    username root;
+                    traceoptions {
+                        file mist_pkgbooster.log;
+                        flag all;
+                    }
+                }
+                file mist_pkghelper.py {
+                    username root;
+                    traceoptions {
+                        file mist_pkghelper.log;
+                        flag all;
+                    }
+                }
+                file mxoc_agentd.py {
+                    daemonize;
+                    respawn-on-normal-exit;
+                    username root;
+                    traceoptions {
+                        file mxoc_agentd.log;
+                        flag all;
+                    }
+                }
+                file mxoc_notifier.py {
+                    username mist;
+                }
+            }
+        }
+    }
+}
+{% endif %}
+{% if 'mist_wired_assurance' in config['custom_fields'] and config['custom_fields']['mist_wired_assurance'] == "cloudx" %}
+groups {
+    mist-script {
+        system {
+            scripts {
+                op {
+                    file mist_helper.py {
+                        arguments {
+                            cmd;
+                        }
+                        checksum sha-256 ec5a6c3858543c48564865faca6a8068781fd47e1e4ed0e9152bdd525b7c5ba4;
+                    }
+                    file mist_vccmd.py {
+                        checksum sha-256 b4012cfbaa9ed42b776fa96d016dd9d1036ebe1a5706ede49567db366d5f5e4b;
+                    }
+                    file mist_pyagent_tools.py {
+                        arguments {
+                            cmd;
+                            sha256sum;
+                            url;
+                            version;
+                        }
+                        checksum sha-256 230bd8950dbae52fd7df7422657e32061b3690475131a602def74f16c886b40a;
+                    }
+                }
+            }
+        }
+        event-options {
+            generate-event {
+                get-stats-every-three-minute time-interval 180;
+                monitor-diskspace-now time-interval 86400;
+            }
+            policy log-on-snmp-trap-link-up {
+                events snmp_trap_link_up;
+                within 90 {
+                    not events chassisd_vchassis_member_update_notice;
+                }
+                attributes-match {
+                    "{$$.interface-name}" matches "^[^.]+$";
+                }
+                then {
+                    event-script mist_link_up_logger.py;
+                }
+            }
+            policy log-on-snmp-trap-link-down {
+                events snmp_trap_link_down;
+                within 90 {
+                    not events chassisd_vchassis_member_update_notice;
+                }
+                attributes-match {
+                    "{$$.interface-name}" matches "^[^.]+$";
+                }
+                then {
+                    event-script mist_link_down_logger.py;
+                }
+            }
+            policy backup-cfg-after-commit {
+                events ui_commit_completed;
+                within 5 {
+                    trigger on 1;
+                }
+                then {
+                    event-script mist_event_dispatcher.py;
+                }
+            }
+            policy backup-cfg-after-no-confirmed {
+                events ui_commit_not_confirmed;
+                attributes-match {
+                    ui_commit_not_confirmed.message matches .*complete;
+                }
+                then {
+                    event-script mist_event_dispatcher.py;
+                }
+            }
+            policy log-on-storm-ctrl-in-effect {
+                events l2ald_st_ctl_in_effect;
+                then {
+                    event-script mist_storm_control_event_logger.py;
+                }
+            }
+            policy log-on-system-events {
+                events [ dot1xd_auth_session_deleted dot1xd_rcvd_eaplogof_athntictd dot1xd_usr_access_denied dot1xd_usr_authenticated dot1xd_usr_session_disconnected dot1xd_usr_athntictd_gst_vlan eswd_stp_state_change_info l2cpd_receive_bpdu_block_enabled authd_radius_server_status_change chassisd_snmp_trap10 ddos_protocol_violation_set ddos_protocol_violation_clear evpn_bgp_peer_status_change evpn_core_isolated evpn_core_isolation_cleared evpn_duplicate_mac bfdd_trap_shop_state_up bfdd_trap_shop_state_down ];
+                within 60 {
+                    trigger until 10;
+                }
+                then {
+                    event-script mist_event_dispatcher.py;
+                }
+            }
+            policy log-critical-system-events {
+                events [ chassisd_vchassis_member_update_notice chassisd_vchassis_member_op_notice l2ald_mac_limit_reached_global l2ald_mac_limit_reset_global snmpd_trap_cold_start ];
+                then {
+                    event-script mist_event_dispatcher.py;
+                }
+            }
+            policy monitor-diskspace-policy {
+                events monitor-diskspace-now;
+                then {
+                    event-script mist_monitor_diskspace.py;
+                }
+            }
+            policy get-stats-policy {
+                events get-stats-every-three-minute;
+                then {
+                    event-script mist_event_dispatcher.py;
+                }
+            }
+            policy system-srx-route-events {
+                events [ rpd_ospf_nbrdown rpd_ospf_nbrup rpd_bgp_neighbor_state_changed ];
+                then {
+                    event-script mist_srx_rt_event.py;
+                }
+            }
+            policy log-on-vccp-port-up {
+                events vccpd_protocol_adjup;
+                attributes-match {
+                    "{$$.interface-name}" matches "^[^.]+";
+                }
+                then {
+                    event-script mist_link_up_logger.py;
+                }
+            }
+            policy log-on-vccp-port-down {
+                events vccpd_protocol_adjdown;
+                attributes-match {
+                    "{$$.interface-name}" matches "^[^.]+";
+                }
+                then {
+                    event-script mist_link_down_logger.py;
+                }
+            }
+            event-script {
+                file mist_event_dispatcher.py {
+                    python-script-user mist;
+                    checksum sha-256 5fd828282bc29a7c140f03200507044a86dc1869fe2438fb3d2cbcc0cdff82ae;
+                }
+                file mist_link_up_logger.py {
+                    python-script-user mist;
+                    checksum sha-256 92f3090ff5fa38343e958f64ca7d03d12dcffffa2dbff25bb47f4f77a712d641;
+                }
+                file mist_link_down_logger.py {
+                    python-script-user mist;
+                    checksum sha-256 47c2f4b0c575b2a8ead65c36ef451c7705f0b040c7c1085dd443c7a5ac7a2153;
+                }
+                file mist_backup_cfg.py {
+                    python-script-user mist;
+                    checksum sha-256 9ef1c0fc06bd78abc097bcc9a4f6e47eed494d3edaf498dd69df33eb194fc58f;
+                }
+                file mist_storm_control_event_logger.py {
+                    python-script-user mist;
+                    checksum sha-256 871b7efa4fe7d04d86034fcdcb63624c675956d7511b2a45ebb98299632be882;
+                }
+                file mist_link_event_capturer.py {
+                    python-script-user mist;
+                    checksum sha-256 9d2f983947c437b757cd90fd1a6eef3fc979a8aaa63e52a739e4539fe2e7a867;
+                }
+                file mist_monitor_diskspace.py {
+                    python-script-user mist;
+                    checksum sha-256 e751c8cf955c2fed7c5f38e3a6e5168c5550a1b24b272a0722421b917d697479;
+                }
+                file mist_dynamic_port_usages.py {
+                    python-script-user mist;
+                    checksum sha-256 e6a667b08dc8714a043dc08f44a13b0480f35fae7c9eecfd1f932ca3821629a4;
+                }
+                file mist_dynamic_port_commit.py {
+                    python-script-user mist;
+                    checksum sha-256 4fb25037a8ec5d57ac72f622c005baec2ab82b4f1e1a218f8eac03f6b39e71de;
+                }
+                file mist_event_aggregator.py {
+                    python-script-user mist;
+                    checksum sha-256 ca1426d833eddb1f519e7a5860cef6fedd08a2d091656add0537aceaf7a9eb7d;
+                }
+                file mist_vcsetup_agent.py {
+                    python-script-user mist;
+                    checksum sha-256 a6a50869c1d92e2bfe473ace86ed2ec0a4710d352cd5683673668f99b3ebb505;
+                }
+                file mist_ssr.py {
+                    python-script-user mist;
+                    checksum sha-256 59faa393b78e526bab64cddb4a99025e290b4edeeb583376816fc799903d3ff6;
+                }
+                file mist_srx_rt_event.py {
+                    python-script-user mist;
+                    checksum sha-256 dd6fc6d40fed12444a264139ac3825461c3309d243f3176595d9d535ad37a384;
+                }
+            }
+        }
+    }
+    mist-dpc {
+        event-options {
+            generate-event {
+                timer-every-one-minute time-interval 60;
+            }
+            policy dynamic-port-detect {
+                events [ lldp_neighbor_up snmp_trap_link_up snmp_trap_link_down ui_commit_completed dot1xd_usr_authenticated get-stats-every-three-minute ];
+                within 90 {
+                    not events chassisd_vchassis_member_update_notice;
+                }
+                then {
+                    event-script mist_dynamic_port_usages.py;
+                }
+            }
+            policy dynamic-port-commit {
+                events timer-every-one-minute;
+                then {
+                    event-script mist_dynamic_port_commit.py;
+                }
+            }
+        }
+    }
+    mxoc-script {
+        system {
+            scripts {
+                commit {
+                    file mxoc_jet_app_optional_fix.slax {
+                        optional;
+                    }
+                }
+            }
+        }
+        event-options {
+            policy mxoc-critical-system-events {
+                events [ chassisd_vchassis_member_update_notice snmpd_trap_cold_start chassisd_vchassis_member_op_notice ];
+                then {
+                    event-script mxoc_critical_events.py;
+                }
+            }
+            event-script {
+                file mxoc_critical_events.py {
+                    python-script-user mist;
+                    checksum sha-256 d6a356dfe806cad78fc15e1e64b786238fd7603307c17ec15a69eb9b17631385;
+                }
+            }
+        }
+    }
+}
+apply-groups [ ezqos-voip mist-script mxoc-script];
+system {
+    commit synchronize;
+    configuration-database {
+        ephemeral {
+            instance bounce-port;
+            instance mist-pcap;
+            allow-commit-synchronize-with-gres;
+        }
+    }
+    scripts {
+        language python;
+        synchronize;
+    }
+    login {
+        user mist {
+            full-name mist;
+            uid 63157;
+            class super-user;
+            authentication {
+                encrypted-password "$6$TJEv/raVeNR3PXUc$0XpMv.e0joJQlMe6n0HPVmHF2obPinymXap5b3jrxlmAejyLOjbdc/za7BQV30NbHClx0Wdei/lRf/ICXRIA8/"; ## SECRET-DATA
+                ssh-rsa "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDK2SIyAqB12mSWuY8eqlk/xvBwBrWzHfReb0rQsA16yT1W3hm54IIxIsmQQwqt1bLsTm0pNULddaAD6DN67j1HJOrPxVtrXIgeLl8LjPtC8ya60ndXxn9MATVlcvTDu5vxpmCWs6IktppudVDvBvacKCZlk7eSX3XtoKeXUcj/X3Y4eniDxMAosLIvCaoIWeJ4RNDbF5jUmcsJrbuvLt1WIu0L4VNhmQGp8aSWQSc6yxlFRUkjrGybCyQtaX4mG2b0M7NYywbd+XGp4CEGLdNqxVNcM6avWgBecIjWIKxeWQZjoHwknQC2nhEwUydDMJRRhG/dRa651DB26kyq98ek/oDeLflBVylNU26wb4d7DdnEgpzRHeEVSwMMlFCpOgMjcBR2sTwTmmEP5aKUrbjMcWyeg5Zl1fn9YGdgOF81zONdN8r+Z1qD2MKgh7WAEYN0y+XulI6z5kQW9cIn2Y4STRp2kYe2bUcmNwwelYiSjObjYHV4YYd8tPDwVjCrwDk= mist@790be815-af8f-4dc5-b8c2-e01b8a107db4"; ## SECRET-DATA
+                ssh-rsa "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDGSZXWQbRESKnHPyBrRFLz8pr+e7clzic0wjJFx2DC06bIaR1CqmxHQUKvuzUfmAedkrMcGw+wWNizYOlPFzWrHCNXpyzx2+Sr9ZUlk27UPfMI6XuB1GZ34ielCCLHt40eU4E1cdy4wnIZ3nxfL7vb6hxzFcC8/giRrujJBK87iSAoByaB9lulNvdHokRNnTP6mCJquOtGdaUTrqUqTr8sueEJTt8ehotdNSlrDreeHODZtB2sgQpmGNzQ2zEFskCqoZl9lgL8IlR/0NSvkOBPAOiikeemDzW3KpLdvXoXUvmMaZPkB0zpS7/T/gMtYLxZ51qO49PKVBvBXr+a3nIkJe1403J80lvmOwVbdO8bvywV6mNpjXe2J0m2Cm+LV7kdD1lZKhih4/DEvBJ4rkfZN/t+rxqms59EpTCkKSb/+N3j/q1OKfXY8o2VEvSkTn1Ag8UNiq1kh84F7CC00UtEbpBAV/Z/AOCaVrdzm3595+9oL2GsXP0i5cPx2ylaFzJW0hB4OerU4DzQ4n/2C8Oq4v/sgBPwjW4YRFmaidoQr2blcoqf916dRsmQR5G1Uc1g3ps+ph5BdjUiZgPvxCTCPIOzNsTbu888UDgnBBF1YeeGXRmfkwQobu8eWfjm+HI0H8/rSfIPDBrjI3hZsHcN0ZYKyzMwkWVmAdjuCaYsWw== noninteractive@mistsys.com"; ## SECRET-DATA
+                ssh-ecdsa "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBItBz6WSD+YBbvX2qvKlLQ71h2qms2A5ARsFQK7GQSiBbh6450VcCNNq6YDmb1/pOrrJ8q7cR90vsvNROi4ZD7I= bot+interactive@mistsys.com"; ## SECRET-DATA
+            }
+        }
+    }
+    services {
+        outbound-ssh {
+            traceoptions {
+                file outbound-ssh.log size 64k files 5;
+                flag all;
+            }
+            client mist {
+                secret "$9$btYaZiHmTFnwYgJGjq.fTz3ApIRSrvWz3hSyrvM7-VwaZik.f5FUDkPQF/9uO1RreWLx7db8LNbwYZG36/C0BcylvMXleZUHkTQyleKxN4aZkmfiHBIcSMWDiHqmTFn/pO1/9lKW87Ns24JjHf5FCA0zFKMWLVbYgoaZjik.5T3bs2aJUHkmfT3ApO1RSlKpuWLx7sYQF369p1RheM8SyaZUDmPEcSyvWx7Vwgox7DiHqf5yleWNdoJGDHq8Xk.Pfn6uO1RlK8X7Vs2O1SeKWx7bs24aUji.Qz65TEcyrvMikqmz3Ap0Ehrqmz6/9puO1REclMWxVs27Nmfz39CM8L7bs4aZkqfGUCtp0hcvWL7wYoJG"; ## SECRET-DATA
+                keep-alive {
+                    retry 12;
+                    timeout 5;
+                }
+                services netconf;
+                oc-term.mistsys.net {
+                    port 2200;
+                    retry 1000;
+                    timeout 60;
+                }
+            }
+        }
+    }
+    authentication-order password;
+    syslog {
+        file escript.log {
+            archive size 2m files 5;
+        }
+        file interactive-commands {
+            interactive-commands any;
+            match "!(.*mist.*)";
+            archive size 2m files 5;
+        }
+        file messages {
+            any info;
+            authorization any;
+            archive size 2m files 5;
+        }
+        file op-script.log {
+            archive size 2m files 5;
+        }
+        file snapshot {
+            archive size 2m files 5;
+        }
+    }
+    extensions {
+        providers {
+            juniper {
+                license-type juniper deployment-scope private;
+            }
+        }
+        extension-service {
+            application {
+                file mist_pkgbooster.py {
+                    username root;      
+                    traceoptions {      
+                        file mist_pkgbooster.log;
+                        flag all;       
+                    }                   
+                }                       
+                file mist_pkghelper.py {
+                    username root;      
+                    traceoptions {      
+                        file mist_pkghelper.log;
+                        flag all;       
+                    }                   
+                }
+                file mxoc_agentd.py {
+                    daemonize;
+                    respawn-on-normal-exit;
+                    username root;
+                    traceoptions {
+                        file mxoc_agentd.log;
+                        flag all;
+                    }
+                }
+                file mxoc_notifier.py { 
+                    username mist;      
+                }                       
+            }                           
+        }                               
+    }                                   
+}
+firewall {
+    family inet {
+        filter mgmt-traffic {
+            term mist-cloud {           
+                from {                  
+                    source-port [ 2200 443 ];
+                    tcp-flags "((syn & ack) | (ack) | (rst) | (fin) | (psh))";
+                }                       
+                then accept;            
+            }                           
+        }
+    }
+}
+{% endif %}
+

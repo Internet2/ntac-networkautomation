@@ -1,0 +1,162 @@
+policy-options {
+    {% set processed_communities = {} %}
+    {% for provider in config.bgp.wan_peers.ddos %}
+        {% for community in provider.communities %}
+            {% if community not in processed_communities %}
+                {% set _ = processed_communities.update({community: True}) %}
+    community Scrubbing-{{ community.split(':')[-1] }}-VRF members {{ community }};
+            {% endif %}
+        {% endfor %}
+    {% endfor %}
+    {% if config.ddos_filters.ddos_ipv4_filter | length > 0 %}
+    prefix-list ddos_ipv4_filter {
+        {% for prefix in config.ddos_filters.ddos_ipv4_filter %}
+        {{ prefix }};
+        {% endfor %}
+    }
+    policy-statement Scrubbing-DDoS {
+        term Target-Network {
+            from {
+                prefix-list-filter ddos_ipv4_filter exact;
+            }
+            then {
+        {% set processed_communities = {} %}
+        {% for provider in config.bgp.wan_peers.ddos %}
+            {% for community in provider.communities %}
+                {% if community not in processed_communities %}
+                    {% set _ = processed_communities.update({community: True}) %}
+                  community Scrubbing-{{ community.split(':')[-1] }}-VRF;
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+                accept;
+            }
+        }
+        term else {
+            then reject;
+        }
+    }
+    {% else %}
+    policy-statement Scrubbing-DDoS {
+        term else {
+            then reject;
+        }
+    }
+    {% endif %}
+    {% if config.ddos_filters.ddos_ipv6_filter | length > 0 %}
+    prefix-list ddos_ipv6_filter {
+        {% for prefix in config.ddos_filters.ddos_ipv6_filter %}
+        {{ prefix }};
+        {% endfor %}
+    }
+    policy-statement Scrubbing-DDoS-ipv6 {
+        term Target-Network {
+            from {
+                prefix-list-filter ddos_ipv6_filter exact;
+            }
+            then {
+        {% set processed_communities = {} %}
+        {% for provider in config.bgp.wan_peers.ddos %}
+            {% for community in provider.communities %}
+                {% if community not in processed_communities %}
+                    {% set _ = processed_communities.update({community: True}) %}
+                community add Scrubbing-{{ community.split(':')[-1] }}-VRF;
+                {% endif %}
+            {% endfor %}
+        {% endfor %}
+                accept;
+            }
+        }
+        term else {
+            then reject;
+        }
+    }
+    {% else %}
+    policy-statement Scrubbing-DDoS-ipv6 {
+        term else {
+            then reject;
+        }
+    }
+    {% endif %}
+    policy-statement deny-all {
+        term else {
+            then reject;
+        }
+    }
+}
+protocols {
+    bgp {
+        group Scrubbing-DDoS {
+            type external;
+            mtu-discovery;
+            family inet {
+                unicast;
+            }
+            local-as {{ config['asn'] }} loops 2;
+            bfd-liveness-detection {
+                minimum-interval 350;
+                multiplier 3;
+                session-mode single-hop;
+            }
+     {% for peer in config['bgp']['wan_peers']['ddos'] %}
+         {% if '::' in peer['ip'] %}
+         {% else %}
+            neighbor {{ peer['ip'] }} {
+                description "{{ peer['name'] }}";
+                import deny-all;
+                export Scrubbing-DDoS;
+              {% if not ('private-as-allow' in peer and peer['private-as-allow']) %}
+                remove-private;
+              {% endif %}
+                peer-as {{ peer['asn'] }};
+              {% for auth_peer in config['bgp']['auth'] %}
+                {% if auth_peer['ip'] == peer['ip'] %}
+                authentication-key "{{ auth_peer['key'] }}";
+                {% endif %}
+              {% endfor %}
+              {% if 'disabled' in peer and peer['disabled'] %}
+                shutdown;
+              {% endif %}
+            }
+         {% endif %}
+     {% endfor %}
+        }
+        group Scrubbing-DDoS-ipv6 {
+            type external;
+            mtu-discovery;
+            family inet6 {
+                unicast;
+                flow;
+            }
+            export redist-ipv6;
+            local-as {{ config['asn'] }} loops 2;
+            bfd-liveness-detection {
+                minimum-interval 350;
+                multiplier 3;
+                session-mode single-hop;
+            }
+     {% for peer in config['bgp']['wan_peers']['ddos'] %}
+         {% if '::' in peer['ip'] %}
+            neighbor {{ peer['ip'] }} {
+                description "{{ peer['name'] }}";
+                import deny-all;
+                export Scrubbing-DDoS-ipv6;
+              {% if not ('private-as-allow' in peer and peer['private-as-allow']) %}
+                remove-private;
+              {% endif %}
+                peer-as {{ peer['asn'] }};
+              {% for auth_peer in config['bgp']['auth'] %}
+                {% if auth_peer['ip'] == peer['ip'] %}
+                authentication-key "{{ auth_peer['key'] }}";
+                {% endif %}
+              {% endfor %}
+                {% if 'disabled' in peer and peer['disabled'] %}
+                shutdown;
+                {% endif %}
+            }
+         {% endif %}
+     {% endfor %}
+        }
+    }
+}
+

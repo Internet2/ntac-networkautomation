@@ -1,0 +1,61 @@
+interfaces {
+    {% set mgmt_ip = config['mgmt_ip'] %}
+    {% if 'vlan' in mgmt_ip %}
+    irb.{{ mgmt_ip['vlan'] }} {
+        {% include 'shared-system-qfx-mgmt-ip.j2' %}
+    }
+    {% endif %}
+    {% if 'oob-fiber' in mgmt_ip %}  {# start block1 #}
+     {% if 'virtual_chassis' in config %}
+    vme {
+     {% else %}
+    em1 {
+     {% endif %}
+        unit 0 {
+            {% include 'shared-system-qfx-mgmt-ip.j2' %}
+        }
+    }
+    {% elif 'oob' in mgmt_ip %}
+    {% if 'virtual_chassis' in config %}
+    vme {
+    {% elif 'MX204' in config['vendor_model'] %}
+    fxp0 {
+    {% else %}
+    em0 {
+    {% endif %}
+        unit 0 {
+            {% include 'shared-system-qfx-mgmt-ip.j2' %}
+        }
+    }
+    {% endif %}
+    {% if 'physical' in mgmt_ip %}
+    {{ mgmt_ip['physical'] }} {
+        unit 0 {
+            {% include 'shared-system-qfx-mgmt-ip.j2' %}
+        }
+    }
+    {% endif %}
+}
+    {% if 'oob' in mgmt_ip or 'oob-fiber' in mgmt_ip %}
+    {% if 'virtual_chassis' in config %}
+    {% else %}
+routing-instances {
+    mgmt_junos {
+        routing-options {
+            static {
+                route 0.0.0.0/0 next-hop {{ config['mgmt_ip']['default_gateway'] }};
+            }
+        }
+    }
+}
+    {% endif %}
+    {% endif %}
+{% if 'vlan' in mgmt_ip %}
+vlans {
+    {% for vlan in config['vlans'] %}{% if vlan['id'] == mgmt_ip['vlan'] %}
+    {{ vlan['name'] }}{% endif %}{% endfor %} {
+        l3-interface irb.{{ mgmt_ip['vlan'] }};
+    }
+}
+{% endif %}
+
