@@ -1,0 +1,40 @@
+policy-options {
+    prefix-list bgp_hosts_{{ neighbor['vrf'] }}_dns {
+        apply-path "routing-instances {{ neighbor['vrf'] }} protocols bgp group dns neighbor <*>";
+    }
+}
+firewall {
+    family inet {
+        filter mgmt-traffic {
+            term from_bgp {
+                from {
+                    source-prefix-list {
+                        bgp_hosts_{{ neighbor['vrf'] }}_dns;
+                    }
+                }
+            }
+            term to_bgp {
+                from {
+                    source-prefix-list {
+                        bgp_hosts_{{ neighbor['vrf'] }}_dns;
+                    }
+                }
+            }
+        }
+    }
+}
+policy-options {
+    policy-statement {{ config['bgp']['vrf_peers']['dns_peers'][0]['vrf'] }}-vrf-from-dns {
+        term anycast {
+            from {
+{% for prefix in config['dns-anycast'] %}
+                route-filter {{ prefix }}/32 exact;
+{% endfor %}
+            }
+            then accept;
+        }
+        term deny-default {
+            then reject;
+        }
+    }
+}           

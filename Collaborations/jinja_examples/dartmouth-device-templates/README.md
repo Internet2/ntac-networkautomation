@@ -1,4 +1,6 @@
-Date: September 9, 2024
+JUNIPER
+
+Date: June 13, 2025
 Contact: networkengineers@dartmouth.onmicrosoft.com
 
 These templates are from Dartmouth College and are provided as examples
@@ -6,8 +8,10 @@ of what we are currently using with our automated device deployments.
 Each update to a configuration does a 'config replace' of the existing
 configuration with the newly generated configuration.
 
-
 These templates will create an EVPN campus network using Juniper devices.
+Ideally configuration that is shared across devices will be loaded from
+the shared directory and only configuration that a single device type
+uses will be within the directory for that specific device role.
 
 The access layer devices generally do not route and are generally
 connected to two distribution routers via an ESI-LAG, or occassionally
@@ -36,6 +40,12 @@ via iBGP.  The service nodes also use BGP connect to Infoblox DNS/DHCP
 servers that advertise anycast DNS servers.  The service nodes also
 connect to any other internal BGP devices.
 
+Work has been started on a new role called 'collapsed-core' that will
+combine the functionality of the core, distribution, service node and
+WAN router into a single device.  This is primarily for a disaster
+recovery scenario and isn't fully functional yet, but there are numerous
+references to this role in the shared templates.
+
 These templates are intended to be used with a variable named 'config',
 which contains definitions for all of the template variables.  We create
 this dynamically based on information from NetBox.  When data from
@@ -50,7 +60,7 @@ probably set via tags.
 
 Some of the fields listed below will only be present if they are defined.
 
-For the various classes of devices the rough definition is expected to be:
+For the various classes of devices the definition should be:
 
 # Access and Aggregation
 
@@ -68,8 +78,8 @@ For the various classes of devices the rough definition is expected to be:
                      'mist_site': <text>,
                      'mist_wired_assurance': <'enabled'|'disabled'>,
                      'stp_bridge_priority': <int>,
-                     'vlan_group': <text>},
-  'device_platform': <device-model>,
+                     'vlan_group': <text> },
+  'device_platform': <os-version>,
   'dhcp_servers': [<ip>, <ip>],
   'dhcp_vrf': '<VRF-name>',
   'dns': { 'domainname': <domain>,
@@ -102,7 +112,7 @@ For the various classes of devices the rough definition is expected to be:
                'ip': <ip>,
                'mask': <mask_length>,
                'vlan': <vlan_id> },
-  'monitors': {'local': {}, 'remote': {}},
+  'monitors': { 'local': {}, 'remote': {} },
   'ntp': { 'servers': [ <ip>, <ip>, ... ],
            'timezone': <timezone> },
   'port_groups': {},
@@ -111,7 +121,7 @@ For the various classes of devices the rough definition is expected to be:
   'routed-vlans': [],
   'rstp_priority': <int>,
   'servers': [<ip>],
-  'snmp': { 'communities': {<community>: [<subnet>]},
+  'snmp': { 'communities': { <community>: [<subnet>] },
             'trap_receivers': [<ip>] },
   'snmp-v3': { 'authentication-password': <passwd>,
                'privacy-password': <passwd>,
@@ -133,28 +143,29 @@ For the various classes of devices the rough definition is expected to be:
   'virtual_chassis': [ { 'alias': '0',
                          'priority': '1',
                          'role': 'routing-engine',
-                         'serial': <text>}],
+                         'serial': <text> } ],
   'vlans': [ { 'description': <text>,
                'name': <text>,
                'routed': <bool>,
                'tags': {<name>: <value>, ... },
                'vid': <int>,
-               'vni': <int>},
+               'vni': <int> },
              ... ]
 }
 ```
 
+
 # Core
 
 ```
-{ 'bgp': { 'keys': [ { 'secret': <passwd>,
-                       'start': <date-time> }],
+{ 'bgp': { 'keys': [ { 'secret': <passwd>, 'start': <date-time> } ],
            'overlay_asn': <ASN>,
            'overlay_device_id': <ip>,
-           'overlay_peers': [ {'ip': <peer-ip>, 'name': <peer-name>}, ... ],
+           'overlay_peers': [ { 'ip': <peer-ip>, 'name': <peer-name> }, ... ],
            'rr_cluster_id': <ip>,
            'underlay_asn': <ASN>,
-           'underlay_peers': [ { 'asn': <ASN>, 'ip': <peer-ip>, 'name': <peer-name> }, ... ] },
+           'underlay_peers': [ { 'asn': <ASN>, 'ip': <peer-ip>, 'name': <peer-name> },
+                               ... ] },
   'can_deploy': <bool>,
   'config_frozen': <bool>,
   'device_platform': <device-model>,
@@ -164,7 +175,7 @@ For the various classes of devices the rough definition is expected to be:
   'dns': { 'domainname': <domain>,
            'network-device-domainname': <domain>,
            'servers': [<ip>]},
-  'evpn': {'target_asn': <ASN>, 'target_switching_rd': <int>},
+  'evpn': { 'target_asn': <ASN>, 'target_switching_rd': <int> },
   'hostname': <text>,
   'in_maintenance_mode': <bool>,
   'interfaces': [ { 'description': <text>,
@@ -176,7 +187,7 @@ For the various classes of devices the rough definition is expected to be:
                     'routed': <bool>,
                     'type': { 'label': <interface_type_label>,
                               'value': <interface_type> },
-                  {'name': <interface-name>, 'unused': True},
+                  { 'name': <interface-name>, 'unused': True },
                   ... ],
   'lag_count': 0,
   'mgmt_hosts': [ <ip>, <ip>, ... ],
@@ -205,15 +216,14 @@ For the various classes of devices the rough definition is expected to be:
   'underlay_loopbacks': [<subnet>],
   'underlay_transport': [<subnet>],
   'users': { <username>: { 'class': 'super-user',
-                     'ssh': 'ssh-rsa '
-                            <key>
-                            <description>,
-                     'uid': <int>},
+                           'ssh': 'ssh-rsa ' <key> <description>,
+                           'uid': <int> },
              ... },
   'vendor': <device_vendor>,
   'vendor_model': <device_model>
 }
 ```
+
 
 # Distribution
 
@@ -299,6 +309,8 @@ For the various classes of devices the rough definition is expected to be:
                     'enabled': <bool>,
                     'ipv4': [<ip>],
                     'ipv6': [<ip>],
+                    'acl_in': <acl_rules>,
+                    'acl_out': <acl_rules>,
                     'name': <interface-name>,
                     'routed': True,
                     'type': {'label': 'Virtual', 'value': 'virtual'},
@@ -326,13 +338,13 @@ For the various classes of devices the rough definition is expected to be:
             ... ],
   'lacp_interfaces': [<interface_name>, <interface_name>, ... ],
   'lag_count': <int>,
-  'loopback_ips': [ {'address': <ip>, 'vrf': <vrf-name>}, ... ],
+  'loopback_ips': [ { 'address': <ip>, 'vrf': <vrf-name> },
+                    ... ],
   'mgmt_hosts': [ <ip>, <ip>, ... ],
   'mgmt_ip': { 'default_gateway': <ip>,
                'ip': <ip>,
                'mask': <mask_length>,
                'vlan': <vlan_id> },
-  'multicast_rp': { <vrf-name>: <ip>, ... },
   'ntp': { 'servers': [ <ip>, <ip>, ... ],
            'timezone': <timezone> },
   'peers': [ { 'device': <peer-name>,
@@ -356,13 +368,12 @@ For the various classes of devices the rough definition is expected to be:
   'syslog': { 'facility': <syslog_level>,
               'messages_ignore': [ <text>, <text>, <text>, ... ],
               'servers': [<ip>, <ip>] },
+  'tags': [],
   'underlay_loopbacks': [<subnet>],
   'underlay_transport': [<subnet>],
   'users': { <username>: { 'class': 'super-user',
-                     'ssh': 'ssh-rsa '
-                            <key>
-                            <description>,
-                     'uid': <int>},
+                           'ssh': 'ssh-rsa ' <key> <description>,
+                           'uid': <int> },
              ... },
   'vendor': <device_vendor>,
   'vendor_model': <device_model>,
@@ -456,7 +467,7 @@ For the various classes of devices the rough definition is expected to be:
   'config_frozen': <bool>,
   'custom_config_text': <text>,
   'device_platform': <device-model>,
-  'device_role': 'Distribution',
+  'device_role': 'Services',
   'dhcp_servers': [<ip>, <ip>],
   'dhcp_vrf': '<VRF-name>',
   'dns': { 'domainname': <domain>,
@@ -480,7 +491,7 @@ For the various classes of devices the rough definition is expected to be:
                     'name': <interface-name>,
                     'type': { 'label': <interface_type_label>,
                               'value': <interface_type> } },
-                  {'name': <interface-name>, 'unused': True},
+                  { 'name': <interface-name>, 'unused': True },
                   { 'description': <text>,
                     'enabled': <bool>,
                     'ipv4': [],
@@ -529,7 +540,6 @@ For the various classes of devices the rough definition is expected to be:
                'ip': <ip>,
                'mask': <mask_length>,
                'vlan': <vlan_id> },
-  'multicast_rp': { <vrf-name>: <ip>, ... },
   'network_announcements': { 'announce_network': [ { 'children': <int>,
                                                      'family': [IPv4|IPv6],
                                                      'network': <ip-prefix> },
@@ -558,6 +568,7 @@ For the various classes of devices the rough definition is expected to be:
   'syslog': { 'facility': <syslog_level>,
               'messages_ignore': [ <text>, <text>, <text>, ... ],
               'servers': [<ip>, <ip>] },
+  'tags': [],
   'transit_vrf': <vrf-name>,
   'underlay_loopbacks': [<subnet>],
   'underlay_transport': [<subnet>],
@@ -602,9 +613,11 @@ For the various classes of devices the rough definition is expected to be:
 }
 ```
 
+
 # WAN
 
 ```
+{
   'bgp': { 'allowed_ISP_netblocks': [ <ip>, <ip>, ... ],
            'allowed_snmp_hosts': [ <ip>, <ip, ... ],
            'auth': [ { 'ip': <ip>,
@@ -643,7 +656,7 @@ For the various classes of devices the rough definition is expected to be:
   'can_deploy': <bool>,
   'custom_config_text': <text>,
   'ddos_filters': { 'ddos_ipv4_filter': [<ip-prefix>],
-                    'ddos_ipv6_filter': [<ip-prefix>]},
+                    'ddos_ipv6_filter': [<ip-prefix>] },
   'device_platform': <device-model>,
   'device_role': 'WAN',
   'dhcp_servers': [<ip>, <ip>],
@@ -658,7 +671,7 @@ For the various classes of devices the rough definition is expected to be:
                     'ipv6': [],
                     'name': <interface-name>,
                     'type': { 'label': <interface_type_label>,
-                              'value': <interface_type>},
+                              'value': <interface_type> },
                   { 'description': <interface-description>,
                     'enabled': <bool>,
                     'gw_mac': <mac-address>,
@@ -671,7 +684,7 @@ For the various classes of devices the rough definition is expected to be:
                     'subinterface': True,
                     'type': {'label': 'Virtual', 'value': 'virtual'},
                     'vrf': <vrf-name> },
-                  {'name': <interface-name>, 'unused': True},
+                  { 'name': <interface-name>, 'unused': True },
                   ... ],
   'lacp': [ {'members': [<interface-name>, <interface-name>], 'name': <lag-name>, 'tags': []}, ... ],
   'lacp_interfaces': [ <interface-name>, <interface-name>, ... ],
@@ -707,6 +720,7 @@ For the various classes of devices the rough definition is expected to be:
   'snmp_location': <text>,
   'syslog': { 'messages_ignore': [ <text>, <text>, <text>, ... ],
               'servers': [<ip>, <ip>] },
+  'tags': [],
   'telemetry': {'target-address': <ip>},
   'transit_vrf': <vrf-name>,
   'users': { <username>: { 'class': 'super-user',
@@ -720,3 +734,4 @@ For the various classes of devices the rough definition is expected to be:
   'vlans': [ {'name': <vlan-name>, 'tags': [], 'vid': <int>, 'vni': <int>}, ... ]
 }
 ```
+

@@ -1,0 +1,67 @@
+groups {
+    ezqos-evpn {
+        class-of-service {
+            classifiers {
+                dscp evpn-dscp-classifier {
+                    import default;
+                    forwarding-class ezqos-voice-fc {
+                        loss-priority low code-points 101110;
+                    }
+                    forwarding-class ezqos-control-fc {
+                        loss-priority low code-points [ 110000 011000 011010 111000 ];
+                    }
+                    forwarding-class ezqos-video-fc {
+                        loss-priority low code-points 100010;
+                    }
+                }
+            }
+            forwarding-classes {
+                class ezqos-best-effort queue-num 0;
+                class ezqos-video-fc queue-num 4;
+                class ezqos-voice-fc queue-num 5;
+                class ezqos-control-fc queue-num 7;
+            }
+            scheduler-maps {
+                ezqos-evpn-sched-maps {
+                    forwarding-class ezqos-voice-fc scheduler ezqos-evpn-voice-scheduler;
+                    forwarding-class ezqos-control-fc scheduler ezqos-evpn-control-scheduler;
+                    forwarding-class ezqos-video-fc scheduler ezqos-evpn-video-scheduler;
+                    forwarding-class ezqos-best-effort scheduler ezqos-evpn-data-scheduler;
+                }
+            }
+            schedulers {
+                ezqos-evpn-voice-scheduler {
+                    buffer-size percent 10;
+                    {% if 'QFX5210' in config['vendor_model'] or 'MX204' in config['vendor_model'] %}
+                    transmit-rate percent 10;
+                    priority low;
+                    {% else %}
+                    priority strict-high;
+                    {% endif %}
+                }
+                ezqos-evpn-control-scheduler {
+                    buffer-size percent 10;
+                    priority strict-high;
+                }
+                ezqos-evpn-video-scheduler {
+                    transmit-rate percent 20;
+                    buffer-size percent 20;
+                    priority low;
+                }
+                ezqos-evpn-data-scheduler {
+                    {% if 'QFX5210' in config['vendor_model'] or 'MX204' in config['vendor_model'] %}
+                    transmit-rate percent 70;
+                    buffer-size percent 60;
+                    {% else %}
+                    transmit-rate percent 80;
+                    buffer-size percent 60;
+                    {% endif %}
+                    priority low;
+                }
+            }
+        }
+    }
+}
+apply-groups ezqos-evpn;
+{% include 'shared-cos-interfaces.j2' %}
+

@@ -1,0 +1,46 @@
+policy-options {
+    policy-statement {{ config['transit_vrf'] }}-vrf-from-{{ config['transit_vrf'] }} {
+        term import-networks {
+            from {
+                prefix-list-filter default-ipv4-prefixes orlonger;
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+    policy-statement {{ config['transit_vrf'] }}-vrf-to-{{ config['transit_vrf'] }} {
+        term import-default {
+            from {
+                route-filter 0.0.0.0/0 exact;
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+    policy-statement {{ config['transit_vrf'] }}-vrf-from-{{ config['transit_vrf'] }}-ipv6 {
+        term import-networks {
+            from {
+                prefix-list-filter default-ipv6-prefixes orlonger;
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+    policy-statement {{ config['transit_vrf'] }}-vrf-to-{{ config['transit_vrf'] }}-ipv6 {
+        term import-default {
+            from {
+                route-filter ::/0 exact;
+            }
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+}

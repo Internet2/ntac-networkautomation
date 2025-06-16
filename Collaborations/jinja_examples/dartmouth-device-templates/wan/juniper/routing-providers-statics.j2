@@ -1,0 +1,46 @@
+policy-options {
+    policy-statement load-balance-per-flow {
+        then {
+            load-balance per-packet;
+        }
+    }
+}
+routing-options {
+    rib inet6.0 {
+        static {
+        {% for this_prefix in config['network_announcements']['announce_network'] %}
+          {% if this_prefix['children'] > 0 and this_prefix['family'] == "IPv6" %}
+            route {{ this_prefix['network'] }} discard preference 180;
+          {% endif %}
+        {% endfor %}
+        {% for peer in config['bgp']['wan_peers']['providers'] %}
+          {% if '::' in peer['ip'] %}
+             {% if 'default_route_ipv6' in peer and peer['default_route_ipv6'] %}
+            route ::/0 next-hop {{ peer['ip'] }};
+             {% endif %}
+          {% endif %}
+        {% endfor %}
+        }
+    }
+    static {
+    {% for this_prefix in config['network_announcements']['announce_network'] %}
+      {% if this_prefix['children'] > 0 and this_prefix['family'] == "IPv4" %}
+        route {{ this_prefix['network'] }} discard preference 180;
+      {% endif %}
+    {% endfor %}
+    {% for peer in config['bgp']['wan_peers']['providers'] %}
+      {% if '::' in peer['ip'] %}
+      {% else %}
+        {% if 'default_route_ipv4' in peer and peer['default_route_ipv4'] %}
+        route 0.0.0.0/0 next-hop {{ peer['ip'] }};
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+    }
+    forwarding-table {
+        export load-balance-per-flow;
+        ecmp-fast-reroute;
+    }
+    router-id {{ config['router_id'] }};
+}
+

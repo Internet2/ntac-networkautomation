@@ -1,0 +1,22 @@
+    {{ member }} {
+        {% for interface in config['interfaces'] %}
+            {% if member == interface['name'] %}
+              {% if (not interface['enabled']) or (('in_maintenance_mode' in config) and (config['in_maintenance_mode'] == True)) %}
+        disable;
+              {% endif %}
+              {% if 'fec' in interface and interface['fec'] %}
+        gigether-options {
+            fec fec91;
+        }
+              {% endif %}
+            {% endif %}
+        {% endfor %}
+        description "member of {{ bundle['name'] }}";
+    {% if 'MX204' in config['vendor_model'] %}
+        gigether-options {
+    {% else %}
+        ether-options {
+    {% endif %}
+            802.3ad {{ bundle['name'] }};
+        }
+    }

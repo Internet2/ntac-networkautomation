@@ -1,0 +1,51 @@
+{% for vrf in config['vrfs'] %}
+  {% if 'rd' in vrf and vrf['rd'] != None %}
+routing-instances {
+    {{ vrf['name'] }} {
+        instance-type vrf;
+    {% for int in config['interfaces'] if not int['name'] in config['lacp_interfaces'] %}
+        {% if 'vrf' in int and int['vrf'] == vrf['name'] %}
+        interface {{ int['name'] }};
+        {% endif %}
+    {% endfor %}
+        route-distinguisher {{ config['router_id'] }}:{{ vrf['rd'] }};
+        vrf-import {{ vrf['name'] }}-vrf-import;
+        vrf-table-label;
+        vrf-target target:{{ config['evpn']['target_asn'] }}:{{ vrf['rd'] }};
+        routing-options {
+            multipath;
+            {% if config['device_role'] in ["Collapsed-Core", "Services"] %}
+            auto-export;
+            autonomous-system {
+                {{ config['bgp']['overlay_asn'] }}.{{ vrf['rd'] }};
+                loops 2;
+                independent-domain {
+                    no-attrset;
+                }
+            }
+              {% for ip_addr in config['loopback_ips'] %}
+                {% if ip_addr['vrf'] == vrf['name'] and not '::' in ip_addr['address'] %}
+            router-id {{ ip_addr['address'] }};
+                {% endif %}
+              {% endfor %}
+            {% endif %}
+        }
+    {% if 'no_evpn' in vrf and vrf['no_evpn'] %}
+    {% else %}
+        protocols {
+            evpn {
+                ip-prefix-routes {
+                    advertise direct-nexthop;
+                    encapsulation vxlan;
+                    vni {{ vrf['rd'] }};
+                    import {{ vrf['name'] }}-vrf-import;
+                    export {{ vrf['name'] }}-vrf-export;
+                }
+            }
+        }
+    {% endif %}
+    }
+}
+  {% endif %}
+{% endfor %}
+

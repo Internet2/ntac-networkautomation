@@ -1,0 +1,58 @@
+routing-instances {                     
+    {{ peer['vrf'] }} {
+        protocols {
+            bgp {
+  {% if '::' in peer['ip'] %}
+                group self-ipv6 {
+                    type external;
+                    mtu-discovery;
+                    family inet6 {
+                        unicast;
+                        flow;
+                    }
+                    bfd-liveness-detection {
+                        minimum-interval 350;
+                        multiplier 3;
+                        session-mode single-hop;
+                    }
+                    neighbor {{ peer['ip'] }} {
+                        description "{{ peer['remote-vrf'] }}";
+                        import {{ peer['vrf'] }}-vrf-from-{{ peer['remote-vrf'] }}-ipv6;
+                        export {{ peer['vrf'] }}-vrf-to-{{ peer['remote-vrf'] }}-ipv6;
+                        peer-as {{ config['bgp']['overlay_asn'] }}.{{ config['rds'][ peer['remote-vrf'] ] }};
+                    {% for auth_peer in config['bgp']['auth'] %}
+                      {% if auth_peer['ip'] == peer['ip'] %}
+                        authentication-key "{{ auth_peer['key'] }}";
+                      {% endif %}
+                    {% endfor %}
+                    }                   
+                }                       
+  {% else %}
+                group self {
+                    type external;
+                    mtu-discovery;
+                    family inet {
+                        unicast;
+                    }
+                    bfd-liveness-detection {
+                        minimum-interval 350;
+                        multiplier 3;
+                        session-mode single-hop;
+                    }
+                    neighbor {{ peer['ip'] }} {
+                        description "{{ peer['remote-vrf'] }}";
+                        import {{ peer['vrf'] }}-vrf-from-{{ peer['remote-vrf'] }};
+                        export {{ peer['vrf'] }}-vrf-to-{{ peer['remote-vrf'] }};
+                        peer-as {{ config['bgp']['overlay_asn'] }}.{{ config['rds'][ peer['remote-vrf'] ] }};
+                    {% for auth_peer in config['bgp']['auth'] %}
+                      {% if auth_peer['ip'] == peer['ip'] %}
+                        authentication-key "{{ auth_peer['key'] }}";
+                      {% endif %}
+                    {% endfor %}
+                    }                   
+                }                       
+  {% endif %}
+            }                           
+        }                               
+    }                                   
+}

@@ -1,0 +1,33 @@
+class-of-service {
+    interfaces {
+  {% for interface in config['interfaces'] if not interface['name'] in config['lacp_interfaces'] %}
+     {% if ( (not 'irb' in interface['name']) and (not 'lo0' in interface['name']) and (not interface['subinterface']) ) %}
+       {% if interface['enabled'] %}
+        {{ interface['name'] }} {
+            scheduler-map ezqos-evpn-sched-maps;
+         {% if 'QFX5210' in config['vendor_model'] or 'QFX5120' in config['vendor_model'] %}
+           {% if interface['switched'] %}
+            unit 0 {
+                classifiers {
+                    dscp evpn-dscp-classifier;
+                }
+            }
+           {% elif interface['routed'] %}
+            classifiers {
+                dscp evpn-dscp-classifier;
+            }
+           {% endif %}
+         {% else %}
+            unit 0 {
+                classifiers {
+                    dscp evpn-dscp-classifier;
+                }
+            }
+         {% endif %}
+        }
+       {% endif %}
+     {% endif %}
+  {% endfor %}
+    }
+}
+

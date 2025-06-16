@@ -1,36 +1,4 @@
-{% if 'lacp' in config %}
-chassis {
-    aggregated-devices {
-        ethernet {
-            device-count {{ config['lag_count'] }};
-        }
-    }
-}
-interfaces {
-{% for bundle in config['lacp'] %}
-  {% for member in bundle['members'] %}
-    {{ member }} {
-        description "member of {{ bundle['name'] }}";
-    {% if 'MX204' in config['device_platform'] %}
-        gigether-options {
-    {% else %}
-        ether-options {
-    {% endif %}
-            802.3ad {{ bundle['name'] }};
-        }
-    }
-  {% endfor %}
-    {{ bundle['name'] }} {
-        aggregated-ether-options {
-            lacp {
-                active;
-                periodic fast;              
-            }
-        }
-    }
-{% endfor %}
-}
-{% endif %}
+{% include 'shared-interfaces-lacp.j2' %}
 {% for interface in config['interfaces'] if not interface['name'] in config['lacp_interfaces'] %}
 {% set rstp_config = "" %}
 interfaces {
@@ -57,7 +25,7 @@ interfaces {
         {% endif %}
         {% if 'tagged_subinterfaces' in interface and interface['tagged_subinterfaces'] %}
         vlan-tagging;
-          {% if 'MX204' in config['device_platform'] %}
+          {% if 'MX204' in config['vendor_model'] %}
         encapsulation flexible-ethernet-services;
           {% endif %}
         {% endif %}
@@ -67,6 +35,23 @@ interfaces {
         mtu 9216;
         {% endif %}
         {% if not 'tagged_subinterfaces' in interface and (('switched' in interface and interface['switched']) or ('routed' in interface and interface['routed'])) %}
+         {% if 'MX204' in config['vendor_model'] and ('switched' in interface and interface['switched']) %}
+        flexible-vlan-tagging;
+        encapsulation flexible-ethernet-services;
+        unit {{ unit }} {
+            family bridge {
+                interface-mode trunk;
+            {% for vlan in config['vlans'] %}
+             {% if vlan['name'] in interface['vlans'] %}
+                vlan-id-list {{ vlan['vid'] }};
+             {% endif %}
+            {% endfor %};
+            }
+        }
+         {% else %}
+            {% if not interface['enabled'] %}
+            disable;
+            {% endif %}
         unit {{ unit }} {
             {% if not interface['enabled'] %}
             disable;
@@ -130,6 +115,7 @@ interfaces {
             }
             {% endif %}
         }
+         {% endif %}
         {% endif %}
         {% endif %}
     }

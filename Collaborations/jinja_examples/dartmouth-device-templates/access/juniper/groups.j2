@@ -52,7 +52,7 @@ groups {
             schedulers {
                 ezqos-voice-scheduler {
                     buffer-size percent 20;
-                    {% if 'QFX5210' in config['vendor_model'] or 'QFX5210' in config['device_platform'] %}
+                    {% if 'QFX5210' in config['vendor_model'] %}
                     priority low;
                     {% else %}
                     priority strict-high;

@@ -179,7 +179,7 @@ vlans {
     }
 }
     {% endif %}
-    {% if not 'QFX' in config['device_platform'] and not 'EX4100-48T' in config['device_platform'] and interface['type']['value'] in ['100base-tx', '1000base-t', '2.5gbase-t', '5gbase-t', '10gbase-t'] %}
+    {% if not 'QFX' in config['vendor_model'] and not 'EX4100-48T' in config['vendor_model'] and not 'EX3400-48T' in config['vendor_model'] and interface['type']['value'] in ['100base-tx', '1000base-t', '2.5gbase-t', '5gbase-t', '10gbase-t'] %}
 poe {
     interface {{ interface['name'] }} {
         telemetries;

@@ -30,7 +30,7 @@ virtual-chassis {
     {% endfor %}
 }
 {% endif %}
-{% if 'QFX5210' in config['device_platform'] or 'QFX5120' in config['device_platform'] %}
+{% if 'QFX5210' in config['vendor_model'] or 'QFX5120' in config['vendor_model'] %}
     {% if 'port_groups' in config and config['port_groups']|length %}
 chassis {
     fpc 0 {

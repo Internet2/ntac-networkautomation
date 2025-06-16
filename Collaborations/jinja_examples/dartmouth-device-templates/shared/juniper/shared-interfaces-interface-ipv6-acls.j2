@@ -1,0 +1,11 @@
+                {% if ('acl_in_ipv6' in interface and interface['acl_in_ipv6']) or ('acl_out_ipv6' in interface and interface['acl_out_ipv6']) %}
+                filter {
+                    {% if 'acl_in_ipv6' in interface and interface['acl_in_ipv6'] %}
+                    input {{ interface['name'] }}_acl_in_ipv6;
+                    {% endif %}
+                    {% if 'acl_out_ipv6' in interface and interface['acl_out_ipv6'] %}
+                    output {{ interface['name'] }}_acl_out_ipv6;
+                    {% endif %}
+                }
+                {% endif %}
+

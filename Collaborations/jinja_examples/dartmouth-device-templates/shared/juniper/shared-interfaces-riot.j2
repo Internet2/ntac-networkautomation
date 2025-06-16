@@ -1,0 +1,36 @@
+           {% set ns.riot_config = interface['name'] %}
+           {# find each VRF enabled for EVPN and make a subinterface #}
+           {% for this_vrf in config['vrfs'] %}
+             {% if 'no_evpn' in this_vrf and this_vrf['no_evpn'] %}
+               {# nothing to do here #}
+             {% elif 'rd' in this_vrf and this_vrf['rd'] %}
+        unit {{ this_vrf['rd'] }} {
+            description {{ this_vrf['name'] }}-L3-RIOT;
+            family ethernet-switching {
+                interface-mode trunk;
+                vlan {
+                    members {{ this_vrf['name'] }}-L3-RIOT;
+                }
+            }
+        }
+             {% endif %}
+           {% endfor %}
+           {# find each EVPN VLAN in a VRF and make a subinterface #}
+           {% for this_int in config['interfaces'] %}
+             {% if 'irb' in this_int['name'] %}
+               {% for this_vlan in config['vlans'] %}
+                 {% if (this_vlan['name'] == this_int['native_vlan']) and ('vni' in this_vlan and this_vlan['vni']) %}
+        unit {{ this_vlan['vid'] }} {
+            description {{ this_vlan['name'] }}-RIOT;
+            family ethernet-switching {
+                interface-mode trunk;
+                vlan {
+                    members {{ this_vlan['name'] }};
+                }
+            }
+        }
+                 {% endif %}
+               {% endfor %}
+             {% endif %}
+           {% endfor %}
+

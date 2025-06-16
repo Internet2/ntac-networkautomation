@@ -1,0 +1,126 @@
+{% if config['device_role'] in ["Collapsed-Core", "Core", "Distribution", "Services", "WAN"] %}
+groups {
+    snmp_traps {
+        snmp {
+            trap-options {
+                source-address {{ config['mgmt_ip']['ip'] }};
+                routing-instance mgmt_junos;
+            }
+            trap-group default-traps {
+                categories {
+                    chassis;
+                    link;
+                    startup;
+                    services;
+                }
+                targets {
+                    {% for server in config['snmp']['trap_receivers'] %}
+                    {{ server }};
+                    {% endfor %}
+                }
+                routing-instance mgmt_junos;
+            }
+        }
+    }
+}
+{% endif %}
+snmp {
+    location "{{ config['snmp_location'] }}";
+    {% for community in config['snmp']['communities'] %}
+    community {{ community }} {
+        clients {
+        {% for client in config['snmp']['communities'][community] %}
+            {{ client }};
+        {% endfor %}
+        }
+        {% if config['device_role'] in ["Collapsed-Core", "Core", "Distribution", "Services", "WAN"] %}
+        routing-instance mgmt_junos;
+        {% endif %}
+    }
+    {% endfor %}
+    v3 {
+        usm {
+            local-engine {
+                user {{ config['snmp-v3']['user-name'] }} {
+                    authentication-sha {
+                        authentication-password {{ config['snmp-v3']['authentication-password'] }}; ## SECRET-DATA
+                    }
+                    privacy-aes128 {
+                        privacy-password {{ config['snmp-v3']['privacy-password'] }}; ## SECRET-DATA
+                    }
+                }
+            }
+        }
+        vacm {
+            security-to-group {
+                security-model usm {
+                    security-name {{ config['snmp-v3']['user-name'] }} {
+                        group {{ config['snmp-v3']['user-name'] }};
+                    }
+                }
+            }
+            access {
+                group {{ config['snmp-v3']['user-name'] }} {
+                    default-context-prefix {
+                        security-model usm {
+                            security-level privacy {
+                                read-view view-read;
+                                write-view view-write;
+                                notify-view view-notify;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        target-address {{ config['snmp-v3']['target-name'] }} {
+            address {{ config['snmp-v3']['target-address'] }};
+            {% if config['device_role'] in ["Collapsed-Core", "Core", "Distribution", "Services", "WAN"] %}
+            routing-instance mgmt_junos;
+            {% endif %}
+            tag-list {{ config['snmp-v3']['target-name'] }};
+            target-parameters {{ config['snmp-v3']['target-name'] }};
+        }
+        target-parameters {{ config['snmp-v3']['target-name'] }} {
+            parameters {
+                message-processing-model v3;
+                security-model usm;
+                security-level privacy;
+                security-name {{ config['snmp-v3']['user-name'] }};
+            }
+            notify-filter {{ config['snmp-v3']['target-name'] }};
+        }
+        notify {{ config['snmp-v3']['target-name'] }} {
+            type trap;
+            tag {{ config['snmp-v3']['target-name'] }};
+        }
+        notify-filter {{ config['snmp-v3']['target-name'] }} {
+            oid .1 include;
+        }
+        snmp-community {{ config['snmp-v3']['user-name'] }} {
+            security-name {{ config['snmp-v3']['user-name'] }};
+        }
+    }
+    view view-read {
+        oid .1 include;
+    }
+    view view-write {
+        oid .1 exclude;
+    }
+    view view-notify {
+        oid .1 include;
+    }
+    trap-options {
+        {% if config['device_role'] in ["Collapsed-Core", "Core", "Distribution", "Services", "WAN"] %}
+        routing-instance mgmt_junos {
+            source-address {{ config['mgmt_ip']['ip'] }};
+        }
+        {% else %}
+        source-address {{ config['mgmt_ip']['ip'] }};
+        {% endif %}
+    }
+    {% if config['device_role'] in ["Collapsed-Core", "Core", "Distribution", "Services", "WAN"] %}
+    routing-instance-access;
+    {% endif %}
+}
+

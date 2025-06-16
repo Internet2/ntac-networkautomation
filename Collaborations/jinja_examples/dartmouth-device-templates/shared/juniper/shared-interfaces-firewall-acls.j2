@@ -1,0 +1,33 @@
+    {% if ('acl_in_ipv4' in interface and interface['acl_in_ipv4']) or ('acl_out_ipv4' in interface and interface['acl_out_ipv4']) %}
+firewall {
+    family inet {
+        {% if 'acl_in_ipv4' in interface and interface['acl_in_ipv4'] %}
+        filter {{ interface['name'] }}_acl_in_ipv4 {
+            {{ interface['acl_in_ipv4'] }}
+        }
+        {% endif %}
+        {% if 'acl_out_ipv4' in interface and interface['acl_out_ipv4'] %}
+        filter {{ interface['name'] }}_acl_out_ipv4 {
+            {{ interface['acl_out_ipv4'] }}
+        }
+        {% endif %}
+    }
+}
+    {% endif %}
+    {% if ('acl_in_ipv6' in interface and interface['acl_in_ipv6']) or ('acl_out_ipv6' in interface and interface['acl_out_ipv6']) %}
+firewall {
+    family inet6 {
+        {% if 'acl_in_ipv6' in interface and interface['acl_in_ipv6'] %}
+        filter {{ interface['name'] }}_acl_in_ipv6 {
+            {{ interface['acl_in_ipv6'] }}
+        }
+        {% endif %}
+        {% if 'acl_out_ipv6' in interface and interface['acl_out_ipv6'] %}
+        filter {{ interface['name'] }}_acl_out_ipv6 {
+            {{ interface['acl_out_ipv6'] }}
+        }
+        {% endif %}
+    }
+}
+    {% endif %}
+

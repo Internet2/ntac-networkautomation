@@ -1,0 +1,52 @@
+protocols {
+    evpn {
+        default-gateway no-gateway-community;
+  {% if config['device-tags'] and 'data-center' in config['device-tags'] and not 'QFX5210' in config['vendor_model'] and False %}
+        remote-ip-host-routes;
+  {% endif %}
+  {% if 'device_platform' in config and not 'Junos 21' in config['device_platform'] %}
+        leave-sync-route-oldstyle;
+  {% endif %}
+        encapsulation vxlan;
+        {% if config['device_role'] in ["Collapsed-Core", "Distribution"] %}
+        multicast-mode ingress-replication;
+        {% endif %}
+        extended-vni-list all;
+        {% if config['device_role'] in ["Collapsed-Core", "Distribution", "Services"] %}
+         duplicate-mac-detection {
+            detection-threshold 20;
+            detection-window 5;
+            auto-recovery-time 5;
+        }
+        {% endif %}
+    }
+}
+policy-options {
+{% if config['device_role'] in ["Collapsed-Core", "Distribution", "Services"] %}
+  {% for vrf in config['vrfs'] %}
+    {% if 'rd' in vrf and vrf['rd'] != None %}
+    community {{ vrf['name'] }}-vrf members target:{{ config['evpn']['target_asn'] }}:{{ vrf['rd'] }};
+    {% endif %}
+  {% endfor %}
+{% endif %}
+    community evpn-switching members target:{{ config['evpn']['target_asn'] }}:{{ config['evpn']['target_switching_rd'] }};
+    policy-statement evpn-switching {
+        term layer2 {
+            from community evpn-switching;
+            then accept;
+        }
+        term default-deny {
+            then reject;
+        }
+    }
+}
+switch-options {
+    vtep-source-interface lo0.0;
+    route-distinguisher {{ config['router_id'] }}:{{ config['evpn']['target_switching_rd'] }};
+    vrf-import evpn-switching;
+    vrf-target {
+        target:{{ config['evpn']['target_asn'] }}:{{ config['evpn']['target_switching_rd'] }};
+        auto;
+    }
+}
+

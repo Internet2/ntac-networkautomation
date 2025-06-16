@@ -1,0 +1,159 @@
+policy-options {
+    prefix-list default-ipv4-prefixes {
+{% for prefix in config['bgp']['default_ipv4_filter'] %}
+        {{ prefix }};
+{% endfor %}
+    }
+    prefix-list default-ipv6-prefixes {
+{% for prefix in config['bgp']['default_ipv6_filter'] %}
+        {{ prefix }};
+{% endfor %}
+    }
+    prefix-list announce-internal-ipv4-prefixes {
+{% for this_prefix in config['network_announcements']['announce_network'] %}
+    {% if this_prefix['family'] == "IPv4" %}
+        {{ this_prefix['network'] }};
+    {% endif %}
+{% endfor %}
+    }
+    prefix-list announce-internal-ipv6-prefixes {
+{% for this_prefix in config['network_announcements']['announce_network'] %}
+    {% if this_prefix['family'] == "IPv6" %}
+        {{ this_prefix['network'] }};
+    {% endif %}
+{% endfor %}
+    }
+    policy-statement to_service_node {
+        term default_route {
+            from {
+                route-filter 0.0.0.0/0 exact;
+            }
+            then accept;
+        }
+        term discard_routes {
+            from {
+                prefix-list-filter announce-internal-ipv4-prefixes exact;
+            }
+            then accept;
+        }
+        term default_deny {
+            then reject;
+        }
+    }
+    policy-statement to_service_node_ipv6 {
+        term default_route {
+            from {
+                route-filter ::/0 exact;
+            }
+            then accept;
+        }
+        term discard_routes {
+            from {
+                prefix-list-filter announce-internal-ipv6-prefixes exact;
+            }
+            then accept;
+        }
+        term default_deny {
+            then reject;
+        }
+    }
+    policy-statement from_service_node {
+        term Campus {
+            from {
+                prefix-list-filter default-ipv4-prefixes orlonger;
+            }
+            then accept;
+        }
+        term default_deny {
+            then reject;
+        }
+    }
+    policy-statement from_service_node_ipv6 {
+        term Campus {
+            from {
+                prefix-list-filter default-ipv6-prefixes orlonger;
+            }
+            then accept;
+        }
+        term default_deny {
+            then reject;
+        }
+    }
+}
+protocols {
+    bgp {
+        group service-nodes {
+            type external;
+            mtu-discovery;
+            family inet {
+                unicast;
+            }
+            local-as {{ config['asn'] }} loops 2;
+            bfd-liveness-detection {
+                minimum-interval 350;
+                multiplier 3;
+                session-mode single-hop;
+            }
+     {% for vrf in config['vrfs'] %}
+         {% if vrf['name'] == config['transit_vrf'] %}
+             {% for peer in config['bgp']['wan_peers']['service-nodes'] %}
+                 {% if '::' in peer['ip'] %}
+                 {% else %}
+                    neighbor {{ peer['ip'] }} {
+                        description "{{ peer['name'] }}";
+                        import from_service_node;
+                        export to_service_node;
+                        peer-as {{ config['bgp']['overlay_asn'] }}.{{ vrf['rd'] }};
+                      {% for auth_peer in config['bgp']['auth'] %}
+                        {% if auth_peer['ip'] == peer['ip'] %}
+                        authentication-key "{{ auth_peer['key'] }}";
+                        {% endif %}
+                      {% endfor %}
+                        {% if 'disabled' in peer and peer['disabled'] %}
+                        shutdown;
+                        {% endif %}
+                    }
+                 {% endif %}
+             {% endfor %}
+         {% endif %}
+     {% endfor %}
+        }
+        group service-nodes-ipv6 {
+            type external;
+            mtu-discovery;
+            family inet6 {
+                unicast;
+                flow;
+            }
+            local-as {{ config['asn'] }} loops 2;
+            bfd-liveness-detection {
+                minimum-interval 350;
+                multiplier 3;
+                session-mode single-hop;
+            }
+     {% for vrf in config['vrfs'] %}
+         {% if vrf['name'] == config['transit_vrf'] %}
+             {% for peer in config['bgp']['wan_peers']['service-nodes'] %}
+                 {% if '::' in peer['ip'] %}
+                    neighbor {{ peer['ip'] }} {
+                        description "{{ peer['name'] }}";
+                        import from_service_node_ipv6;
+                        export to_service_node_ipv6;
+                        peer-as {{ config['bgp']['overlay_asn'] }}.{{ vrf['rd'] }};
+                      {% for auth_peer in config['bgp']['auth'] %}
+                        {% if auth_peer['ip'] == peer['ip'] %}
+                        authentication-key "{{ auth_peer['key'] }}";
+                        {% endif %}
+                      {% endfor %}
+                        {% if 'disabled' in peer and peer['disabled'] %}
+                        shutdown;
+                        {% endif %}
+                    }
+                 {% endif %}
+             {% endfor %}
+         {% endif %}
+     {% endfor %}
+        }
+    }
+}
+

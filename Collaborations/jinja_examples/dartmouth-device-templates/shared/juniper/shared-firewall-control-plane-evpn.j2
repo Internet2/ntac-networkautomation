@@ -1,0 +1,32 @@
+policy-options {
+    prefix-list underlay-loopbacks {
+        {% for loopback_net in config['underlay_loopbacks'] %}
+        {{ loopback_net }};
+        {% endfor %}
+    }
+    prefix-list underlay-p2p {
+        {% for transport_net in config['underlay_transport'] %}
+        {{ transport_net }};
+        {% endfor %}
+    }
+    prefix-list network-transport {
+        {% for loopback_net in config['underlay_loopbacks'] %}
+        {{ loopback_net }};
+        {% endfor %}
+        {% for transport_net in config['underlay_transport'] %}
+        {{ transport_net }};
+        {% endfor %}
+        {% if config['device_role'] in ["Collapsed-Core", "Distribution", "Services"] %}
+          {% for bgp_net in config['bgp']['bgp_networks'] %}
+        {{ bgp_net }};
+          {% endfor %}
+        {% endif %}
+    }
+    prefix-list bgp_hosts_underlay {
+        apply-path "protocols bgp group underlay neighbor <*>";
+    }
+    prefix-list bgp_hosts_overlay {
+        apply-path "protocols bgp group overlay neighbor <*>";
+    }
+}
+
